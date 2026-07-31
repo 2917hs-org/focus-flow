@@ -82,3 +82,6 @@ session.json
 history.jsonl
 *.jsonl.tmp
 *.json.tmp
+
+# Packaging output
+dist/

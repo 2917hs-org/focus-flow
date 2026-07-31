@@ -13,11 +13,25 @@
         <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
         <IsWindowsTarget>false</IsWindowsTarget>
         <IsWindowsTarget Condition="$(TargetFramework.Contains('-windows'))">true</IsWindowsTarget>
+
+        <!-- Identity. Both packaging systems read these, and without them every build
+             reports itself as 1.0.0.0 from no publisher. Version is the single source of
+             truth: the macOS Info.plist and the Windows manifest are generated from it. -->
+        <AssemblyName>FocusFlow</AssemblyName>
+        <Version>1.0.0</Version>
+        <FileVersion>1.0.0.0</FileVersion>
+        <AssemblyVersion>1.0.0.0</AssemblyVersion>
+        <Product>FocusFlow</Product>
+        <Company>FocusFlow</Company>
+        <Authors>Hasan Siddiqui</Authors>
+        <Copyright>Copyright © 2026 Hasan Siddiqui</Copyright>
+        <Description>A lightweight study and break timer for the menu bar and system tray.</Description>
     </PropertyGroup>
 
     <PropertyGroup Condition="'$(IsWindowsTarget)' == 'true'">
         <ApplicationManifest>app.manifest</ApplicationManifest>
         <ApplicationIcon>Assets\app-icon.ico</ApplicationIcon>
+
     </PropertyGroup>
 
     <!-- Platform folders are opt-in per TFM so macOS code never reaches the Windows

@@ -86,6 +86,10 @@ public partial class App : Avalonia.Application
 
             viewModel.AlertRequested += (sender, e) => ShowAlert(e.Heading, e.Body);
 
+            // Storage and permission failures raised from the application layer.
+            _provider.GetRequiredService<UserAlerts>().AlertRaised +=
+                (sender, e) => ShowAlert(e.Heading, e.Body);
+
             // Another launch asking us to surface.
             if (InstanceGuard is not null)
             {
@@ -175,6 +179,11 @@ public partial class App : Avalonia.Application
         // are switched per target framework.
         services.AddSingleton<ITrayService, TrayService>();
         services.AddSingleton<IFilePickerService, FilePickerService>();
+
+        // Registered twice on purpose: services depend on the interface, while App needs
+        // the concrete type to subscribe to its event.
+        services.AddSingleton<UserAlerts>();
+        services.AddSingleton<IUserAlerts>(sp => sp.GetRequiredService<UserAlerts>());
         services.AddSingleton<IWindowPlacementService, WindowPlacementService>();
 #if WINDOWS
         services.AddSingleton<INotificationService, WindowsNotificationService>();

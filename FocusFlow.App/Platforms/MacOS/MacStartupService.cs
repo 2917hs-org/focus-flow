@@ -16,9 +16,17 @@ namespace FocusFlow.App.Platforms.MacOS;
 /// </remarks>
 public sealed class MacStartupService : IStartupService
 {
-    private const string Label = "com.focusflow.app";
+    /// <summary>
+    /// Matches CFBundleIdentifier in build/macos/Info.plist. launchd labels conventionally
+    /// mirror the bundle id, and a mismatch makes the agent hard to find alongside the app.
+    /// </summary>
+    private const string Label = "com.hasansiddiqui.focusflow";
 
-    public bool IsSupported => OperatingSystem.IsMacOS() && ExecutablePath() is not null;
+    /// <summary>
+    /// Only offered from a real .app bundle — see <see cref="BundlePath"/> for why the raw
+    /// executable is not good enough.
+    /// </summary>
+    public bool IsSupported => OperatingSystem.IsMacOS() && BundlePath() is not null;
 
     private static string PlistPath() => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
@@ -51,7 +59,7 @@ public sealed class MacStartupService : IStartupService
             }
 
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            File.WriteAllText(path, BuildPlist(ExecutablePath()!));
+            File.WriteAllText(path, BuildPlist(BundlePath()!));
             RunLaunchctl("load", path);
             return true;
         }
@@ -62,23 +70,38 @@ public sealed class MacStartupService : IStartupService
     }
 
     /// <summary>
-    /// The apphost next to the managed assembly. Environment.ProcessPath points at the
-    /// dotnet host during `dotnet run`, which would register the wrong thing.
+    /// Walks up from the running executable to the enclosing .app bundle, or null when
+    /// there isn't one (a `dotnet run` build, or a loose publish folder).
     /// </summary>
-    private static string? ExecutablePath()
+    /// <remarks>
+    /// The agent must launch the bundle, not the executable inside it. Starting
+    /// Contents/MacOS/FocusFlow directly bypasses LaunchServices, and the app then comes up
+    /// with a Dock tile despite LSUIElement — verified while packaging: the same build
+    /// shows a Dock icon when the binary is run directly and none when opened as a bundle.
+    /// Launch-at-login would otherwise contradict the whole menu-bar design.
+    /// </remarks>
+    private static string? BundlePath()
     {
-        var path = Environment.ProcessPath;
-        if (string.IsNullOrEmpty(path))
+        var exe = Environment.ProcessPath;
+        if (string.IsNullOrEmpty(exe))
         {
             return null;
         }
 
-        return Path.GetFileNameWithoutExtension(path).Equals("dotnet", StringComparison.OrdinalIgnoreCase)
-            ? null
-            : path;
+        // .../FocusFlow.app/Contents/MacOS/FocusFlow
+        var macOsDir = Path.GetDirectoryName(exe);
+        var contents = Path.GetDirectoryName(macOsDir);
+        var bundle = Path.GetDirectoryName(contents);
+
+        var looksLikeBundle = bundle is not null
+            && Path.GetFileName(macOsDir) == "MacOS"
+            && Path.GetFileName(contents) == "Contents"
+            && bundle.EndsWith(".app", StringComparison.OrdinalIgnoreCase);
+
+        return looksLikeBundle ? bundle : null;
     }
 
-    private static string BuildPlist(string executablePath) =>
+    private static string BuildPlist(string bundlePath) =>
         $"""
          <?xml version="1.0" encoding="UTF-8"?>
          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -88,7 +111,9 @@ public sealed class MacStartupService : IStartupService
              <string>{Label}</string>
              <key>ProgramArguments</key>
              <array>
-                 <string>{SecurityElement.Escape(executablePath)}</string>
+                 <string>/usr/bin/open</string>
+                 <string>-a</string>
+                 <string>{SecurityElement.Escape(bundlePath)}</string>
              </array>
              <key>RunAtLoad</key>
              <true/>

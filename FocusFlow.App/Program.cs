@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using Avalonia;
+using Avalonia.Controls;
 using FocusFlow.App.Services;
 
 namespace FocusFlow.App;
@@ -48,6 +49,10 @@ internal class Program
     public static AppBuilder BuildAvaloniaApp()
         => AppBuilder.Configure<App>()
             .UsePlatformDetect()
+            // LSUIElement in Info.plist is not enough on its own: Avalonia sets the macOS
+            // activation policy itself during startup and puts the app back in the Dock.
+            // FocusFlow lives in the menu bar, so it should not also own a Dock tile.
+            .With(new MacOSPlatformOptions { ShowInDock = false })
 #if DEBUG
             //.WithDeveloperTools()
 #endif

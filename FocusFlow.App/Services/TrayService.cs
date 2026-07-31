@@ -37,9 +37,14 @@ public sealed class TrayService : ITrayService, IDisposable
     /// featureless silhouette. The template cut knocks the brain out to negative space so
     /// the mark still reads. Windows tray icons render in colour, so they use the original.
     /// </remarks>
-    private static readonly Uri IdleIconUri = new(OperatingSystem.IsMacOS()
-        ? "avares://FocusFlow.App/Assets/tray-template.png"
-        : "avares://FocusFlow.App/Assets/app-icon.png");
+    /// <remarks>
+    /// The assembly name is read rather than written out. An avares URI embeds it, so
+    /// hardcoding "FocusFlow.App" silently broke every icon the moment AssemblyName was
+    /// set to "FocusFlow" for packaging — and it broke at runtime, not at build time.
+    /// </remarks>
+    private static readonly Uri IdleIconUri = new(
+        $"avares://{typeof(TrayService).Assembly.GetName().Name}/Assets/"
+        + (OperatingSystem.IsMacOS() ? "tray-template.png" : "app-icon.png"));
 
     private readonly TrayIcon _trayIcon;
     private readonly WindowIcon _staticIcon;

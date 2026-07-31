@@ -21,6 +21,7 @@ public sealed class SessionPersistenceService : IDisposable
     private readonly ITimerService _timerService;
     private readonly ISessionStateStorage _storage;
     private readonly TimeProvider _timeProvider;
+    private readonly IUserAlerts? _alerts;
     private readonly Lock _gate = new();
 
     private long _lastWrite;
@@ -30,11 +31,13 @@ public sealed class SessionPersistenceService : IDisposable
     public SessionPersistenceService(
         ITimerService timerService,
         ISessionStateStorage storage,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        IUserAlerts? alerts = null)
     {
         _timerService = timerService;
         _storage = storage;
         _timeProvider = timeProvider;
+        _alerts = alerts;
     }
 
     /// <summary>
@@ -112,9 +115,15 @@ public sealed class SessionPersistenceService : IDisposable
         {
             _storage.Save(state);
         }
-        catch (Exception)
+        catch (Exception e)
         {
-            // Best effort: never let a failed snapshot interrupt the session.
+            // Best effort — a failed snapshot must never interrupt the session — but tell
+            // the user, because the promise of crash recovery is now silently broken.
+            _alerts?.Report(
+                "session-save",
+                "FocusFlow can't save your session",
+                "The timer keeps running, but if the app closes unexpectedly this session "
+                + "won't be restored.\n\n" + e.Message);
         }
     }
 

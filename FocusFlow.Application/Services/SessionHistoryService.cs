@@ -32,6 +32,7 @@ public sealed class SessionHistoryService : IDisposable
     private readonly ITimerService _timerService;
     private readonly ISessionHistoryStore _store;
     private readonly TimeProvider _timeProvider;
+    private readonly IUserAlerts? _alerts;
 
     private bool _started;
     private bool _disposed;
@@ -39,11 +40,13 @@ public sealed class SessionHistoryService : IDisposable
     public SessionHistoryService(
         ITimerService timerService,
         ISessionHistoryStore store,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        IUserAlerts? alerts = null)
     {
         _timerService = timerService;
         _store = store;
         _timeProvider = timeProvider;
+        _alerts = alerts;
     }
 
     public void StartTracking()
@@ -68,9 +71,15 @@ public sealed class SessionHistoryService : IDisposable
         {
             _store.Append(e.ToRecord(_timeProvider.GetUtcNow()));
         }
-        catch (Exception)
+        catch (Exception failure)
         {
-            // Losing one history line must never interrupt the session that just ended.
+            // Losing one line must never interrupt the session that just ended, but a
+            // history that silently stops recording is worse than one that says so.
+            _alerts?.Report(
+                "history-save",
+                "FocusFlow can't record your session history",
+                "Completed sessions aren't being logged, so your totals will be "
+                + "incomplete.\n\n" + failure.Message);
         }
     }
 

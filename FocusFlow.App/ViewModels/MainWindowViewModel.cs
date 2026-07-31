@@ -224,7 +224,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         {
             StartupWarning = _startupService.IsSupported
                 ? "Couldn't update the login item."
-                : "Launch on startup needs a published build (it does nothing under 'dotnet run').";
+                : OperatingSystem.IsMacOS()
+                    ? "Launch at login needs the packaged FocusFlow.app, not a dev build."
+                    : "Launch at login needs a published build, not 'dotnet run'.";
         }
     }
 

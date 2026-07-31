@@ -3,50 +3,62 @@
 A minimalist desktop utility for managing study/work sessions and breaks, designed to
 integrate seamlessly with macOS and Windows.
 
-FocusFlow runs from the macOS menu bar / Windows system tray. Closing the window hides it
-to the tray and keeps the timer running; the app only quits from the tray menu.
+FocusFlow lives in the macOS menu bar / Windows system tray. Closing *or* minimising the
+window hides it to the tray and keeps the timer running; the app only quits from the tray
+menu.
 
 ---
 
 ## Status
 
-Working cross-platform build. The timer core, persistence and session history are done and
-covered by tests. The tray/menu-bar shell, global hotkeys, packaging and localization are
-not yet started — see [Not implemented](#not-implemented).
+The timer, persistence, session history, the tray surface and macOS packaging are done and
+covered by tests. Windows packaging, global hotkeys, logging and localization are not
+started — see [Not implemented](#not-implemented).
 
 | | |
 |---|---|
-| Tests | 66 passing (xUnit + `FakeTimeProvider`) |
+| Tests | 84 passing (xUnit + `FakeTimeProvider`) |
 | Builds | Debug + Release, both target frameworks, 0 warnings |
-| Verified on | macOS (Apple Silicon) |
-| Not verified | **The entire Windows runtime path** — see [Caveats](#caveats) |
+| macOS | `.app` + DMG build and run; verified menu-bar only |
+| Windows | Compiles and publishes — **the runtime path has never been executed** |
 
 ---
 
 ## Features
 
 **Sessions**
-- Start / stop / pause / resume / reset, plus **Skip** to advance manually
+- Start / stop / reset, plus **Skip** to advance manually
 - Study 1–120 min (default 25), break 1–60 min (default 5)
 - Standalone break, without running a study session first
 - **Infinite mode**, or a finite run of 1–10 sessions
 - Auto-start the next break and/or study session, configurable independently
 
+**Focus discipline**
+
+There is deliberately **no Pause during a study session**. Starting one is a commitment,
+and an easy Pause is what erodes it. Stop remains the way out and is recorded in the
+history as an abandoned session. Breaks stay pausable — pausing a break isn't a lapse.
+
 **Alerts**
-- Native notifications — Action Center toasts on Windows, notification banners on macOS
-- Alarm sound with volume control, choosing from built-in system sounds or your own
-  WAV/MP3 file
+- A configurable **reminder before a session ends** (1–10 minutes), which stands in for
+  watching the clock
+- Native notifications — Action Center toasts on Windows, banners on macOS
+- Alarm sound with volume control, from built-in system sounds or your own WAV/MP3
 - Optional music when a break ends
+- A warning window if the machine slept through the end of a session
 
 **Persistence** — all local, no network, no account
 - Settings survive restarts and are versioned for a future import/export
 - An interrupted session is restored on the next launch, always paused
 - Every finished session is appended to a history log for later reporting
+- If any of that fails, **you are told** rather than left with silently missing data
 
 **Platform**
+- Menu bar shows the remaining minutes; system tray shows it on hover
 - Launch at login (per-user; no administrator rights)
 - Light / dark / follow-system theme
 - Survives sleep, wake and system clock changes without losing time
+- Only one instance runs; a second launch surfaces the first
 - HiDPI aware; the window reopens on whichever monitor you're using
 
 ---
@@ -56,7 +68,7 @@ not yet started — see [Not implemented](#not-implemented).
 Requires the [.NET 10 SDK](https://dotnet.microsoft.com/download).
 
 ```bash
-git clone <repo-url> && cd FocusFlow
+git clone <repo-url> && cd focus-flow
 dotnet build FocusFlow.slnx
 ```
 
@@ -76,19 +88,28 @@ Run the tests:
 dotnet test FocusFlow.Domain.Tests/FocusFlow.Domain.Tests.csproj
 ```
 
-Publish:
+### Packaging (macOS)
 
 ```bash
-dotnet publish FocusFlow.App -c Release -f net10.0-windows10.0.17763.0 -r win-x64 --self-contained false
+./build/macos/package.sh arm64
 ```
+
+Accepts `arm64`, `x64` or `universal`, and writes `dist/macos/FocusFlow.app` plus a DMG.
+Only `arm64` has been exercised — the `lipo` merge in `universal` is unproven.
+
+The result is **ad-hoc signed**, which runs on the build machine but is blocked by
+Gatekeeper anywhere else. Real distribution needs an Apple Developer ID:
 
 ```bash
-dotnet publish FocusFlow.App -c Release -f net10.0 -r osx-arm64 --self-contained false
+CODESIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" ./build/macos/package.sh universal
 ```
 
-> **Note:** launch-at-login does nothing under `dotnet run` — `Environment.ProcessPath`
-> points at the dotnet host rather than the app, so registering it would pin the wrong
-> binary. The app detects this and says so. Test it from a published build.
+The script switches on the hardened runtime when a real identity is present. Notarisation
+(`xcrun notarytool`) is still a separate step and is not scripted.
+
+> **Note:** launch-at-login is only offered from a packaged `FocusFlow.app`. The agent has
+> to launch the bundle rather than the executable inside it, so there is nothing valid to
+> register under `dotnet run`. The app detects this and says so.
 
 ---
 
@@ -130,7 +151,8 @@ things fall out of that:
   countdown, because nothing reads wall-clock time to decide how much is left.
 - A gap of more than 5 seconds between polls means the process was starved, i.e. the
   machine slept. That time is credited back rather than charged to your session, and works
-  regardless of whether the platform's monotonic clock freezes during sleep.
+  regardless of whether the platform's monotonic clock freezes during sleep. Sleeping is
+  not focus time, so a session slept through is held, not completed.
 
 `TimeProvider` is injected, so tests drive the clock deterministically instead of sleeping.
 State is handed out as immutable snapshots, since the engine ticks on a timer thread while
@@ -140,7 +162,7 @@ the UI reads on the dispatcher thread.
 
 ## Data files
 
-Stored under `%APPDATA%\FocusFlow\` on Windows and `~/.config/FocusFlow/` on macOS.
+`%APPDATA%\FocusFlow\` on Windows, `~/Library/Application Support/FocusFlow/` on macOS.
 Nothing leaves the machine.
 
 | File | Purpose |
@@ -148,6 +170,7 @@ Nothing leaves the machine.
 | `config.json` | Settings. Versioned, indented, safe to hand-edit. |
 | `session.json` | The in-flight session, for crash recovery. Deleted on a clean stop. |
 | `history.jsonl` | Append-only log of finished sessions. |
+| `instance.lock` | Held by the running instance; a stale one does not block startup. |
 
 `history.jsonl` is [JSON Lines](https://jsonlines.org) — one self-contained object per line:
 
@@ -172,38 +195,55 @@ time spent; an immediate start-then-stop is discarded as a misclick.
 | | macOS | Windows |
 |---|---|---|
 | Tray / menu bar | Avalonia `TrayIcon` (`NSStatusItem`) | Avalonia `TrayIcon` (`Shell_NotifyIcon`) |
+| Tray surface | Native menu: readout + all actions | Same |
+| Countdown | Rendered into the icon as `25m` | Tooltip on hover |
 | Notifications | `osascript` | `ToastNotificationManagerCompat` |
 | Audio | `afplay -v` | MCI (`mciSendString`, winmm) |
-| Launch at login | `~/Library/LaunchAgents` plist | `HKCU\…\CurrentVersion\Run` |
+| Launch at login | `~/Library/LaunchAgents` → `open -a` the bundle | `HKCU\…\CurrentVersion\Run` |
 | Pointer position | CoreGraphics `CGEventGetLocation` | `GetCursorPos` |
 | Sleep detection | Poll-gap heuristic (shared) | Poll-gap heuristic (shared) |
 
-Two deliberate deviations from the obvious choices:
+Deliberate deviations from the obvious choices:
 
 - **Windows audio uses MCI, not `System.Media.SoundPlayer`.** SoundPlayer is WAV-only with
   no volume control, so it cannot satisfy the MP3 + volume requirement. MCI's `mpegvideo`
-  device handles both and ships with Windows, which avoids taking a dependency on
-  NAudio or LibVLC. Windows *system-sound aliases* still go through `PlaySound` and play at
-  system volume — the slider only affects file-based sounds.
+  device handles both and ships with Windows, avoiding a dependency on NAudio or LibVLC.
+  Windows *system-sound aliases* still go through `PlaySound` at system volume — the
+  slider only affects file-based sounds.
 - **The tray is Avalonia's `TrayIcon`, not WinForms `NotifyIcon`.** One implementation for
-  both platforms, and no WinForms message pump running inside an Avalonia app.
+  both platforms, and no WinForms message pump inside an Avalonia app.
+- **Everything lives on the tray menu, not a popup window.** Two attempts at a window on
+  click both failed on macOS: with a menu attached the click goes to the menu, and with no
+  menu attached Avalonia never raises `Clicked` at all, leaving the icon inert. Avalonia
+  offers no way to get a window from a status-item click.
+- **The menu bar countdown is drawn into the icon bitmap.** There is no Avalonia API for
+  text beside a status item, but the icon is just an image. It is rendered black on
+  transparent and flagged `IsTemplateIcon` so macOS inverts it for a light or dark bar.
+
+### Icons
+
+| File | Used for |
+|---|---|
+| `Assets/app-icon.png` | window, Dock, Alt-Tab, Windows tray |
+| `Assets/app-icon.ico` | Windows executable |
+| `Assets/app-icon.icns` | macOS bundle |
+| `Assets/tray-template.png` | macOS menu bar (idle) |
+
+`tray-template.png` is a separate monochrome cut. A macOS template image is an alpha mask —
+the colours are discarded and everything opaque is painted in the bar's tint — so the colour
+logo collapses into one featureless silhouette. The template knocks the interior out to
+negative space so the mark still reads.
 
 ---
 
 ## Not implemented
 
-Known gaps against the full specification:
-
-- **Persistent countdown in the tray.** The remaining time is currently a tooltip, shown on
-  hover. Windows tray icons have no text label (the digits would have to be rendered into
-  the icon bitmap); macOS `NSStatusItem.title` can show text but Avalonia doesn't expose it.
 - **Global hotkeys** — needs `RegisterHotKey` on Windows and an Accessibility-permission
   monitor on macOS.
-- **Lightweight popup** — clicking the tray opens the full window, not a compact popup.
-  No progress bar; the tray context menu only offers Open and Quit.
+- **Windows packaging** — no MSIX manifest, Winget manifest or installer.
+- **Code signing / notarisation** on either platform.
 - **Launch minimized** — the window is shown on first launch.
-- Logging, localization, accessibility (screen reader / high contrast), single-instance
-  enforcement, auto-update, packaging (MSIX/DMG) and code signing.
+- Logging, localization, accessibility (screen reader / high contrast), auto-update.
 - No CI pipeline.
 - Website blocking and cloud sync are **out of scope** for this version.
 
@@ -214,13 +254,15 @@ Known gaps against the full specification:
 - **The Windows runtime path has never been executed.** Everything compiles and publishes,
   but MCI audio, the Run key, toasts, `GetCursorPos` and the DPI manifest were only built
   from macOS. Smoke-test these first on a real Windows machine.
+- **macOS notifications are attributed to "Script Editor"**, not FocusFlow, because they go
+  through `osascript`. Fixing that needs `UNUserNotifications` interop.
 - MCI's `mpegvideo` device is missing on Windows N editions without the Media Feature Pack;
   MP3 falls back to the alias beep there.
 - On a **mixed Retina / non-Retina** macOS setup, the active-monitor calculation can pick a
   neighbouring display, so the window opens on the wrong monitor. Correct when all displays
   share a scale factor.
-- `Assets/tray-icon.png` is a generated placeholder. For macOS it should be replaced with a
-  monochrome template image so it adapts to the light/dark menu bar.
+- The settings window is ~880 px tall with no scrollbar, so it **will not fit a 768p
+  laptop**.
 - Performance targets (memory, CPU, startup) have not been measured.
 
 ---

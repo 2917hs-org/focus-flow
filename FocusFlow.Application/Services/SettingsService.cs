@@ -16,6 +16,7 @@ public sealed class SettingsService : ISettingsService, IDisposable
     private static readonly TimeSpan SaveDelay = TimeSpan.FromMilliseconds(500);
 
     private readonly IConfigStorage _storage;
+    private readonly IUserAlerts? _alerts;
     private readonly ITimer _saveTimer;
     private readonly Lock _gate = new();
 
@@ -27,10 +28,15 @@ public sealed class SettingsService : ISettingsService, IDisposable
     {
     }
 
-    public SettingsService(IConfigStorage storage, TimeProvider timeProvider)
+    /// <param name="alerts">
+    /// Optional so tests can construct the service without a UI; null simply means
+    /// failures stay silent, which is the old behaviour.
+    /// </param>
+    public SettingsService(IConfigStorage storage, TimeProvider timeProvider, IUserAlerts? alerts = null)
     {
         _storage = storage;
-        _current = Load(storage);
+        _alerts = alerts;
+        _current = Load(storage, alerts);
         _saveTimer = timeProvider.CreateTimer(
             _ => Flush(),
             state: null,
@@ -96,20 +102,33 @@ public sealed class SettingsService : ISettingsService, IDisposable
         {
             _storage.Save(toSave);
         }
-        catch (Exception)
+        catch (Exception e)
         {
-            // Losing a settings write must not take the app down mid-session.
+            // Still swallowed so a failed write cannot interrupt a running session — but
+            // no longer silently. Without this the user changes a setting, it appears to
+            // take, and it is gone at next launch with nothing to explain why.
+            _alerts?.Report(
+                "settings-save",
+                "FocusFlow can't save your settings",
+                "Your changes apply to this session but won't be remembered next time. "
+                + "FocusFlow needs permission to write to its data folder.\n\n"
+                + e.Message);
         }
     }
 
-    private static TimerConfig Load(IConfigStorage storage)
+    private static TimerConfig Load(IConfigStorage storage, IUserAlerts? alerts)
     {
         try
         {
             return storage.Load().Normalized();
         }
-        catch (Exception)
+        catch (Exception e)
         {
+            alerts?.Report(
+                "settings-load",
+                "FocusFlow couldn't read your settings",
+                "Default settings have been restored. Your previous preferences may have "
+                + "been lost.\n\n" + e.Message);
             return new TimerConfig();
         }
     }
