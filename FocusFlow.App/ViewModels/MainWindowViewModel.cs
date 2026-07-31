@@ -28,6 +28,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly SessionHistoryService _history;
 
     /// <summary>
+    /// Raised for things the user must actually see. App owns the window; the ViewModel
+    /// stays free of Window references.
+    /// </summary>
+    public event EventHandler<(string Heading, string Body)>? AlertRequested;
+
+    /// <summary>
     /// Set while pushing stored settings into the bound properties, so the resulting
     /// change notifications don't loop straight back into <see cref="ISettingsService"/>.
     /// </summary>
@@ -47,6 +53,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _playMusicAfterBreak;
     [ObservableProperty] private bool _launchOnStartup;
     [ObservableProperty] private AppTheme _theme;
+    [ObservableProperty] private bool _reminderEnabled;
+    [ObservableProperty] private int _reminderLeadMinutes;
 
     [ObservableProperty] private string _currentTime = "25:00";
     [ObservableProperty] private string _statusText = "Ready";
@@ -79,6 +87,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _timerService.TimerUpdated += OnTimerUpdated;
         _timerService.SessionEnded += OnSessionEnded;
         _timerService.SystemResumed += OnSystemResumed;
+        _timerService.ReminderDue += OnReminderDue;
 
         Apply(_timerService.CurrentState);
         RefreshTodaySummary();
@@ -111,6 +120,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             MusicPath = config.MusicPath;
             PlayMusicAfterBreak = config.PlayMusicAfterBreak;
             Theme = config.Theme;
+            ReminderEnabled = config.ReminderEnabled;
+            ReminderLeadMinutes = Math.Max(1, (int)Math.Round(config.ReminderLeadTime.TotalMinutes));
             SelectedSound = ResolveSound(config.AlarmSoundPath);
 
             // Trust the OS over the config file: the user may have removed the login item
@@ -163,6 +174,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     partial void OnSessionCountChanged(int value) => Persist(c => c.SessionCount = value);
 
     partial void OnAlarmVolumeChanged(int value) => Persist(c => c.AlarmVolume = value);
+
+    partial void OnReminderEnabledChanged(bool value) => Persist(c => c.ReminderEnabled = value);
+
+    partial void OnReminderLeadMinutesChanged(int value) =>
+        Persist(c => c.ReminderLeadTime = TimeSpan.FromMinutes(value));
 
     partial void OnMusicPathChanged(string? value) => Persist(c => c.MusicPath = value);
 
@@ -285,7 +301,19 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private void StopAudio() => _audioPlayer.Stop();
 
     private bool CanStart() => !IsSessionActive;
-    private bool CanPause() => IsSessionActive && !IsPaused;
+
+    /// <summary>
+    /// Deliberately not available during a study session: starting one is a commitment,
+    /// and an easy Pause is the thing that erodes it. Stop remains the way out, and is
+    /// recorded in the history as an abandoned session. Breaks stay pausable — pausing a
+    /// break isn't a lapse in focus.
+    /// </summary>
+    private bool CanPause() => IsSessionActive && !IsPaused && Mode == TimerMode.Break;
+
+    /// <summary>
+    /// Resume stays available whatever the mode: a session restored after a crash always
+    /// comes back paused, and the user needs a way to pick it up again.
+    /// </summary>
     private bool CanResume() => IsSessionActive && IsPaused;
     private bool CanStop() => IsSessionActive;
     private bool CanReset() => IsSessionActive;
@@ -293,6 +321,15 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     private bool IsSessionActive { get; set; }
     private bool IsPaused { get; set; }
+    private TimerMode Mode { get; set; } = TimerMode.Idle;
+
+    /// <summary>Drives the popup's Pause button visibility.</summary>
+    [ObservableProperty] private bool _canPauseNow;
+
+    [ObservableProperty] private bool _isPausedNow;
+
+    /// <summary>0-1 through the current session, for the popup progress bar.</summary>
+    [ObservableProperty] private double _sessionProgress;
 
     private void OnTimerUpdated(object? sender, TimerUpdatedEventArgs e) =>
         OnUiThread(() => Apply(e.State));
@@ -355,6 +392,16 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         OnUiThread(() => TodaySummary = text);
     }
 
+    private void OnReminderDue(object? sender, ReminderDueEventArgs e)
+    {
+        var minutes = Math.Max(1, (int)Math.Round(e.Remaining.TotalMinutes));
+        var what = e.Mode == TimerMode.Study ? "Study session" : "Break";
+
+        _notificationService.ShowNotification(
+            $"{what} ending soon",
+            $"About {minutes} minute(s) left.");
+    }
+
     /// <summary>
     /// FR-101. The engine already excludes the suspended time from the session; this just
     /// tells the user why the clock did not move while the lid was shut.
@@ -363,6 +410,19 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         var minutes = (int)Math.Round(e.SuspendedFor.TotalMinutes);
         var howLong = minutes >= 1 ? $"{minutes} min" : $"{(int)e.SuspendedFor.TotalSeconds}s";
+
+        if (e.SessionWouldHaveEnded)
+        {
+            // The session did not complete: time asleep is not focus time. Say so plainly
+            // in a window rather than a notification the user would have missed.
+            OnUiThread(() => AlertRequested?.Invoke(this, (
+                "Your session was interrupted",
+                $"This machine was asleep for about {howLong}, which is longer than the "
+                + "time your session had left.\n\nSleeping doesn't count as focus time, "
+                + "so the session was held rather than completed. It's still waiting where "
+                + "you left it.")));
+            return;
+        }
 
         OnUiThread(() => StatusText = $"Resumed after {howLong} asleep — timer was held");
     }
@@ -388,6 +448,16 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         CurrentTime = Format(state.RemainingTime);
         IsSessionActive = state.Mode != TimerMode.Idle;
         IsPaused = state.IsPaused;
+        Mode = state.Mode;
+        IsPausedNow = state.IsPaused;
+        CanPauseNow = CanPause();
+
+        var planned = state.Mode == TimerMode.Break
+            ? _settings.Current.BreakDuration
+            : _settings.Current.StudyDuration;
+        SessionProgress = state.Mode == TimerMode.Idle || planned <= TimeSpan.Zero
+            ? 0
+            : Math.Clamp(1 - (state.RemainingTime.TotalSeconds / planned.TotalSeconds), 0, 1);
 
         var of = _settings.Current.InfiniteMode ? string.Empty : $" of {_settings.Current.SessionCount}";
 
@@ -439,5 +509,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _timerService.TimerUpdated -= OnTimerUpdated;
         _timerService.SessionEnded -= OnSessionEnded;
         _timerService.SystemResumed -= OnSystemResumed;
+        _timerService.ReminderDue -= OnReminderDue;
     }
 }

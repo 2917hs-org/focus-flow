@@ -1,0 +1,152 @@
+using System;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace FocusFlow.App.Services;
+
+/// <summary>
+/// Ensures only one FocusFlow runs, and hands activation to the instance already running.
+/// </summary>
+/// <remarks>
+/// <para>
+/// A second launch of a timer app is never what the user wants — two instances would each
+/// own a tray icon, each write the session file, and quietly corrupt each other's history.
+/// </para>
+/// <para>
+/// Uses an exclusive lock on a file rather than a named mutex, because a mutex is a
+/// Windows-only concept in practice: .NET maps named mutexes onto files on Unix with
+/// awkward lifetime semantics. An exclusively-opened file works identically on both, and
+/// the OS releases the handle if the process dies, so a crash can't lock the user out.
+/// </para>
+/// </remarks>
+public sealed class SingleInstanceGuard : IDisposable
+{
+    private readonly string _lockPath;
+    private readonly string _signalPath;
+
+    private FileStream? _lock;
+    private FileSystemWatcher? _watcher;
+    private bool _disposed;
+
+    public SingleInstanceGuard(string directory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+        Directory.CreateDirectory(directory);
+
+        _lockPath = Path.Combine(directory, "instance.lock");
+        _signalPath = Path.Combine(directory, "activate.signal");
+    }
+
+    /// <summary>Raised when another launch asked this instance to show itself.</summary>
+    public event EventHandler? ActivationRequested;
+
+    /// <summary>
+    /// Claims the single-instance slot. Returns false when another instance already holds
+    /// it — in which case that instance has been asked to surface and this one should exit.
+    /// </summary>
+    public bool TryAcquire()
+    {
+        try
+        {
+            _lock = new FileStream(
+                _lockPath,
+                FileMode.OpenOrCreate,
+                FileAccess.ReadWrite,
+                FileShare.None,
+                bufferSize: 1,
+                FileOptions.DeleteOnClose);
+        }
+        catch (IOException)
+        {
+            // Held by the running instance: poke it, then let the caller bow out.
+            SignalRunningInstance();
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Can't tell either way; better to run than to refuse to start.
+            return true;
+        }
+
+        StartWatchingForSignals();
+        return true;
+    }
+
+    private void SignalRunningInstance()
+    {
+        try
+        {
+            File.WriteAllText(_signalPath, DateTimeOffset.UtcNow.ToString("O"));
+        }
+        catch (Exception)
+        {
+            // Worst case the first instance stays hidden; the user clicks the tray icon.
+        }
+    }
+
+    private void StartWatchingForSignals()
+    {
+        try
+        {
+            var directory = Path.GetDirectoryName(_signalPath)!;
+
+            _watcher = new FileSystemWatcher(directory, Path.GetFileName(_signalPath))
+            {
+                NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.CreationTime,
+                EnableRaisingEvents = true
+            };
+
+            _watcher.Created += OnSignal;
+            _watcher.Changed += OnSignal;
+        }
+        catch (Exception)
+        {
+            // Single-instance still holds; only the "focus the first window" nicety is lost.
+        }
+    }
+
+    private void OnSignal(object? sender, FileSystemEventArgs e)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        ActivationRequested?.Invoke(this, EventArgs.Empty);
+
+        // Clear it so the next launch produces a fresh event rather than being swallowed
+        // as a duplicate.
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(200);
+            try
+            {
+                File.Delete(_signalPath);
+            }
+            catch (Exception)
+            {
+            }
+        });
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+
+        if (_watcher is not null)
+        {
+            _watcher.Created -= OnSignal;
+            _watcher.Changed -= OnSignal;
+            _watcher.Dispose();
+        }
+
+        // FileOptions.DeleteOnClose removes the lock file as this handle closes.
+        _lock?.Dispose();
+    }
+}

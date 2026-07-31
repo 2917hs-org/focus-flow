@@ -1,5 +1,7 @@
-﻿using System;
+using System;
+using System.IO;
 using Avalonia;
+using FocusFlow.App.Services;
 
 namespace FocusFlow.App;
 
@@ -11,9 +13,36 @@ internal class Program
     [STAThread]
     public static void Main(string[] args)
     {
-        BuildAvaloniaApp()
-            .StartWithClassicDesktopLifetime(args);
+        // Claim the single-instance slot before Avalonia starts. Two FocusFlows would each
+        // own a tray icon and each write the session and history files, corrupting both.
+        // Deliberately before AppBuilder: there is no point spinning up a UI we are about
+        // to tear down.
+        var guard = new SingleInstanceGuard(DataDirectory());
+
+        if (!guard.TryAcquire())
+        {
+            // The running instance has been signalled to surface; nothing left to do here.
+            guard.Dispose();
+            return;
+        }
+
+        App.InstanceGuard = guard;
+
+        try
+        {
+            BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+        }
+        finally
+        {
+            guard.Dispose();
+        }
     }
+
+    private static string DataDirectory() => Path.Combine(
+        Environment.GetFolderPath(
+            Environment.SpecialFolder.ApplicationData,
+            Environment.SpecialFolderOption.Create),
+        "FocusFlow");
 
     // Avalonia configuration, don't remove; also used by visual designer.
     public static AppBuilder BuildAvaloniaApp()

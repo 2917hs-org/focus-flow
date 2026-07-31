@@ -31,8 +31,10 @@
             <WrapPanel HorizontalAlignment="Center" ItemSpacing="8" LineSpacing="8">
                 <Button Content="Start" Command="{Binding StartCommand}" />
                 <Button Content="Break" Command="{Binding StartBreakCommand}" />
-                <Button Content="Pause" Command="{Binding PauseCommand}" />
-                <Button Content="Resume" Command="{Binding ResumeCommand}" />
+                <Button Content="Pause" Command="{Binding PauseCommand}"
+                        IsVisible="{Binding CanPauseNow}" />
+                <Button Content="Resume" Command="{Binding ResumeCommand}"
+                        IsVisible="{Binding IsPausedNow}" />
                 <Button Content="Skip" Command="{Binding SkipCommand}" />
                 <Button Content="Reset" Command="{Binding ResetCommand}" />
                 <Button Content="Stop" Command="{Binding StopCommand}" />
@@ -66,6 +68,14 @@
                 <StackPanel Spacing="4" IsEnabled="{Binding IsSessionCountEnabled}">
                     <TextBlock Text="Sessions per run (1-10)" />
                     <NumericUpDown Value="{Binding SessionCount, Mode=TwoWay}"
+                                   Minimum="1" Maximum="10" Increment="1" FormatString="0" />
+                </StackPanel>
+
+                <CheckBox Content="Remind me before a session ends"
+                          IsChecked="{Binding ReminderEnabled, Mode=TwoWay}" />
+                <StackPanel Spacing="4" IsEnabled="{Binding ReminderEnabled}">
+                    <TextBlock Text="Remind me this many minutes before the end" />
+                    <NumericUpDown Value="{Binding ReminderLeadMinutes, Mode=TwoWay}"
                                    Minimum="1" Maximum="10" Increment="1" FormatString="0" />
                 </StackPanel>
 

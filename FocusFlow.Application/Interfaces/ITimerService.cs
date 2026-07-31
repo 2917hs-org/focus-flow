@@ -30,6 +30,9 @@ public interface ITimerService
     /// <summary>FR-101. Fires after the machine wakes from sleep.</summary>
     event EventHandler<SystemResumedEventArgs>? SystemResumed;
 
+    /// <summary>Fires shortly before a session ends.</summary>
+    event EventHandler<ReminderDueEventArgs>? ReminderDue;
+
     Task StartAsync(TimerConfig config);
 
     /// <summary>FR-002. Runs a single break with no study session attached.</summary>

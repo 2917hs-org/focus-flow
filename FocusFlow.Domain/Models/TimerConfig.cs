@@ -31,6 +31,9 @@ public class TimerConfig
     public const int MinVolume = 0;
     public const int MaxVolume = 100;
 
+    public static readonly TimeSpan MinReminderLead = TimeSpan.FromSeconds(30);
+    public static readonly TimeSpan MaxReminderLead = TimeSpan.FromMinutes(10);
+
     /// <summary>Schema of the file this was loaded from; see <see cref="CurrentSchemaVersion"/>.</summary>
     public int SchemaVersion { get; set; } = CurrentSchemaVersion;
 
@@ -70,6 +73,16 @@ public class TimerConfig
     /// <summary>FR-012. Register the app to start when the user logs in.</summary>
     public bool LaunchOnStartup { get; set; }
 
+    /// <summary>
+    /// Warn shortly before a session ends. This replaces the always-visible tray
+    /// countdown: rather than watching the clock, the user gets one nudge as the session
+    /// closes out.
+    /// </summary>
+    public bool ReminderEnabled { get; set; } = true;
+
+    /// <summary>How long before the end the reminder fires.</summary>
+    public TimeSpan ReminderLeadTime { get; set; } = TimeSpan.FromMinutes(2);
+
     /// <summary>FR-015.</summary>
     public AppTheme Theme { get; set; } = AppTheme.System;
 
@@ -87,6 +100,8 @@ public class TimerConfig
         MusicPath = MusicPath,
         PlayMusicAfterBreak = PlayMusicAfterBreak,
         LaunchOnStartup = LaunchOnStartup,
+        ReminderEnabled = ReminderEnabled,
+        ReminderLeadTime = ReminderLeadTime,
         Theme = Theme
     };
 
@@ -104,6 +119,10 @@ public class TimerConfig
 
         clone.SessionCount = Math.Clamp(clone.SessionCount, MinSessionCount, MaxSessionCount);
         clone.AlarmVolume = Math.Clamp(clone.AlarmVolume, MinVolume, MaxVolume);
+
+        clone.ReminderLeadTime = clone.ReminderLeadTime < MinReminderLead ? MinReminderLead
+            : clone.ReminderLeadTime > MaxReminderLead ? MaxReminderLead
+            : clone.ReminderLeadTime;
 
         if (string.IsNullOrWhiteSpace(clone.AlarmSoundPath))
         {

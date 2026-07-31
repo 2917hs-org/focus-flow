@@ -68,6 +68,9 @@ public sealed class TimerEngine : ITimerEngine, IDisposable
     /// <summary>Timestamp of the previous poll, used to spot a suspend gap (FR-101).</summary>
     private long _lastPoll;
 
+    /// <summary>Whether the pre-end reminder has already fired for this session.</summary>
+    private bool _reminderFired;
+
     private bool _disposed;
 
     public TimerEngine() : this(TimeProvider.System)
@@ -82,6 +85,7 @@ public sealed class TimerEngine : ITimerEngine, IDisposable
     public event EventHandler<TimerTickEventArgs>? Tick;
     public event EventHandler<SessionEndedEventArgs>? SessionEnded;
     public event EventHandler<SystemResumedEventArgs>? SystemResumed;
+    public event EventHandler<ReminderDueEventArgs>? ReminderDue;
 
     public SessionState CurrentState
     {
@@ -294,6 +298,7 @@ public sealed class TimerEngine : ITimerEngine, IDisposable
         SessionState snapshot;
         SessionEndedEventArgs? ended = null;
         SystemResumedEventArgs? resumed = null;
+        ReminderDueEventArgs? reminder = null;
 
         lock (_gate)
         {
@@ -307,16 +312,40 @@ public sealed class TimerEngine : ITimerEngine, IDisposable
 
             if (gap > SuspendThreshold)
             {
+                // Read this *before* crediting the gap back, while ComputeRemaining still
+                // reflects the slept-through time.
+                var wouldHaveEnded = ComputeRemaining() <= TimeSpan.Zero;
+
                 // FR-101. Sleeping is not studying: push the segment start forward by the
                 // gap so the suspended time is never charged to the session. On platforms
                 // whose monotonic clock already freezes during sleep this is a no-op in
                 // effect; on those where it keeps running it is what stops a nap from
                 // silently burning through the whole session.
                 _segmentStart += (long)(gap.TotalSeconds * _timeProvider.TimestampFrequency);
-                resumed = new SystemResumedEventArgs(gap, Snapshot());
+
+                // A session that was nearly over before the machine slept should not have
+                // its reminder fire late, on the far side of the nap.
+                if (wouldHaveEnded)
+                {
+                    _reminderFired = true;
+                }
+
+                resumed = new SystemResumedEventArgs(gap, Snapshot(), wouldHaveEnded);
             }
 
-            if (ComputeRemaining() <= TimeSpan.Zero)
+            var remaining = ComputeRemaining();
+
+            if (!_reminderFired
+                && _config.ReminderEnabled
+                && _config.ReminderLeadTime < _sessionPlanned
+                && remaining > TimeSpan.Zero
+                && remaining <= _config.ReminderLeadTime)
+            {
+                _reminderFired = true;
+                reminder = new ReminderDueEventArgs(_mode, remaining, Snapshot());
+            }
+
+            if (remaining <= TimeSpan.Zero)
             {
                 ended = AdvanceSession(SessionOutcome.Completed, forceStart: false);
             }
@@ -327,7 +356,8 @@ public sealed class TimerEngine : ITimerEngine, IDisposable
             // 200ms poll does not spam the UI with five identical updates per second.
             // A wake still has to get through: crediting the slept time back leaves the
             // remaining time identical, so dedup alone would silently drop the event.
-            if (ended is null && resumed is null && snapshot.RemainingTime == _lastRaised)
+            if (ended is null && resumed is null && reminder is null
+                && snapshot.RemainingTime == _lastRaised)
             {
                 return;
             }
@@ -340,6 +370,11 @@ public sealed class TimerEngine : ITimerEngine, IDisposable
         if (resumed is not null)
         {
             SystemResumed?.Invoke(this, resumed);
+        }
+
+        if (reminder is not null)
+        {
+            ReminderDue?.Invoke(this, reminder);
         }
 
         if (ended is not null)
@@ -436,6 +471,7 @@ public sealed class TimerEngine : ITimerEngine, IDisposable
         _segmentStart = _timeProvider.GetTimestamp();
         _sessionStartedAt = _timeProvider.GetUtcNow();
         _sessionPlanned = _segmentRemaining;
+        _reminderFired = false;
     }
 
     private TimeSpan ComputeRemaining()

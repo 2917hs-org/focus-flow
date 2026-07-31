@@ -1,0 +1,20 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="FocusFlow.App.Views.AlertWindow"
+        Title="FocusFlow"
+        Width="380"
+        SizeToContent="Height"
+        CanResize="False"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterScreen">
+    <StackPanel Margin="24" Spacing="16">
+        <TextBlock x:Name="HeadingText" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" />
+        <TextBlock x:Name="BodyText" TextWrapping="Wrap" Opacity="0.85" />
+
+        <StackPanel x:Name="ActionPanel" Orientation="Horizontal"
+                    HorizontalAlignment="Right" Spacing="8">
+            <Button x:Name="SecondaryButton" Content="Not now" IsVisible="False" />
+            <Button x:Name="PrimaryButton" Content="OK" IsDefault="True" />
+        </StackPanel>
+    </StackPanel>
+</Window>

@@ -89,15 +89,38 @@ public sealed class SessionEndedEventArgs : EventArgs
 /// </summary>
 public sealed class SystemResumedEventArgs : EventArgs
 {
-    public SystemResumedEventArgs(TimeSpan suspendedFor, SessionState state)
+    public SystemResumedEventArgs(TimeSpan suspendedFor, SessionState state, bool sessionWouldHaveEnded)
     {
         SuspendedFor = suspendedFor;
         State = state;
+        SessionWouldHaveEnded = sessionWouldHaveEnded;
     }
 
     /// <summary>Roughly how long the machine was asleep. Not charged to the session.</summary>
     public TimeSpan SuspendedFor { get; }
 
+    public SessionState State { get; }
+
+    /// <summary>
+    /// True when the machine slept for longer than the session had left. The session is
+    /// deliberately *not* completed — sleeping isn't focusing — but the user needs telling
+    /// that the time they were away has not been credited.
+    /// </summary>
+    public bool SessionWouldHaveEnded { get; }
+}
+
+/// <summary>Raised shortly before a session ends, per TimerConfig.ReminderLeadTime.</summary>
+public sealed class ReminderDueEventArgs : EventArgs
+{
+    public ReminderDueEventArgs(TimerMode mode, TimeSpan remaining, SessionState state)
+    {
+        Mode = mode;
+        Remaining = remaining;
+        State = state;
+    }
+
+    public TimerMode Mode { get; }
+    public TimeSpan Remaining { get; }
     public SessionState State { get; }
 }
 
@@ -110,6 +133,9 @@ public interface ITimerEngine
 
     /// <summary>FR-101. Fires after the machine wakes from sleep.</summary>
     event EventHandler<SystemResumedEventArgs>? SystemResumed;
+
+    /// <summary>Fires once per session, shortly before it ends.</summary>
+    event EventHandler<ReminderDueEventArgs>? ReminderDue;
 
     /// <summary>Starts a fresh run at study session 1.</summary>
     void Start(TimerConfig config);

@@ -18,6 +18,7 @@ public sealed class TimerService : ITimerService, IDisposable
         _timerEngine.Tick += OnTick;
         _timerEngine.SessionEnded += OnSessionEnded;
         _timerEngine.SystemResumed += OnSystemResumed;
+        _timerEngine.ReminderDue += OnReminderDue;
     }
 
     public SessionState CurrentState => _timerEngine.CurrentState;
@@ -25,6 +26,7 @@ public sealed class TimerService : ITimerService, IDisposable
     public event EventHandler<TimerUpdatedEventArgs>? TimerUpdated;
     public event EventHandler<SessionEndedEventArgs>? SessionEnded;
     public event EventHandler<SystemResumedEventArgs>? SystemResumed;
+    public event EventHandler<ReminderDueEventArgs>? ReminderDue;
 
     public Task StartAsync(TimerConfig config)
     {
@@ -59,10 +61,14 @@ public sealed class TimerService : ITimerService, IDisposable
     private void OnSystemResumed(object? sender, SystemResumedEventArgs e) =>
         SystemResumed?.Invoke(this, e);
 
+    private void OnReminderDue(object? sender, ReminderDueEventArgs e) =>
+        ReminderDue?.Invoke(this, e);
+
     public void Dispose()
     {
         _timerEngine.Tick -= OnTick;
         _timerEngine.SessionEnded -= OnSessionEnded;
         _timerEngine.SystemResumed -= OnSystemResumed;
+        _timerEngine.ReminderDue -= OnReminderDue;
     }
 }

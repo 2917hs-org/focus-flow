@@ -6,6 +6,7 @@ using Avalonia.Markup.Xaml;
 using FocusFlow.App.Services;
 using FocusFlow.App.ViewModels;
 using FocusFlow.App.Views;
+using Avalonia.Threading;
 using FocusFlow.Application.Interfaces;
 using FocusFlow.Application.Services;
 using FocusFlow.Domain.Engines;
@@ -23,6 +24,12 @@ namespace FocusFlow.App;
 public partial class App : Avalonia.Application
 {
     private ServiceProvider? _provider;
+    private TrayPopup? _popup;
+    private MainWindow? _mainWindow;
+    private IWindowPlacementService? _placement;
+
+    /// <summary>Set by Program when another launch was detected and refused.</summary>
+    public static SingleInstanceGuard? InstanceGuard { get; set; }
 
     public override void Initialize()
     {
@@ -43,6 +50,8 @@ public partial class App : Avalonia.Application
         // Begin logging finished sessions to the local history file.
         _provider.GetRequiredService<SessionHistoryService>().StartTracking();
 
+        _placement = _provider.GetRequiredService<IWindowPlacementService>();
+
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             // Closing the window hides to the tray instead of quitting; the app only
@@ -52,20 +61,101 @@ public partial class App : Avalonia.Application
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
             var window = new MainWindow { DataContext = viewModel };
+            _mainWindow = window;
+
             window.Closing += (sender, e) =>
             {
                 e.Cancel = true;
                 window.Hide();
             };
+
+            // Minimising goes to the tray too, not just closing — the app should never sit
+            // in the dock/taskbar as a second copy of the tray icon.
+            window.PropertyChanged += (sender, e) =>
+            {
+                if (e.Property == Window.WindowStateProperty
+                    && window.WindowState == WindowState.Minimized)
+                {
+                    window.WindowState = WindowState.Normal;
+                    window.Hide();
+                }
+            };
+
             desktop.MainWindow = window;
+
+            BuildPopup(viewModel, desktop);
+            WireTray(viewModel, desktop);
+
+            viewModel.AlertRequested += (sender, e) => ShowAlert(e.Heading, e.Body);
+
+            // Another launch asking us to surface.
+            if (InstanceGuard is not null)
+            {
+                InstanceGuard.ActivationRequested += (sender, e) =>
+                    Dispatcher.UIThread.Post(() => _placement?.ShowOnActiveScreen(window));
+            }
 
             // Disposing the container flushes the debounced settings write, writes a
             // final session snapshot and removes the tray icon.
-            desktop.Exit += (sender, e) => _provider?.Dispose();
+            desktop.Exit += (sender, e) =>
+            {
+                _provider?.Dispose();
+                InstanceGuard?.Dispose();
+            };
         }
 
         base.OnFrameworkInitializationCompleted();
     }
+
+    private void BuildPopup(MainWindowViewModel viewModel, IClassicDesktopStyleApplicationLifetime desktop)
+    {
+        _popup = new TrayPopup { DataContext = viewModel };
+        _popup.OpenRequested += (sender, e) =>
+        {
+            if (_mainWindow is not null)
+            {
+                _placement?.ShowOnActiveScreen(_mainWindow);
+            }
+        };
+        _popup.ExitRequested += (sender, e) => desktop.Shutdown();
+    }
+
+    private void WireTray(MainWindowViewModel viewModel, IClassicDesktopStyleApplicationLifetime desktop)
+    {
+        if (_provider?.GetRequiredService<ITrayService>() is not TrayService tray)
+        {
+            return;
+        }
+
+        // Left-click toggles the compact popup; "Open" escalates to the full window.
+        tray.PopupRequested += (sender, e) => Dispatcher.UIThread.Post(TogglePopup);
+        tray.OpenRequested += (sender, e) => Dispatcher.UIThread.Post(() =>
+        {
+            if (_mainWindow is not null)
+            {
+                _placement?.ShowOnActiveScreen(_mainWindow);
+            }
+        });
+    }
+
+    private void TogglePopup()
+    {
+        if (_popup is null)
+        {
+            return;
+        }
+
+        if (_popup.IsVisible)
+        {
+            _popup.Hide();
+            return;
+        }
+
+        _placement?.ShowOnActiveScreen(_popup);
+    }
+
+    private void ShowAlert(string heading, string body) =>
+        Dispatcher.UIThread.Post(() => new AlertWindow(heading, body).Show());
 
     private static ServiceProvider BuildServiceProvider()
     {
