@@ -24,7 +24,6 @@ namespace FocusFlow.App;
 public partial class App : Avalonia.Application
 {
     private ServiceProvider? _provider;
-    private TrayPopup? _popup;
     private MainWindow? _mainWindow;
     private IWindowPlacementService? _placement;
 
@@ -55,7 +54,7 @@ public partial class App : Avalonia.Application
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             // Closing the window hides to the tray instead of quitting; the app only
-            // exits via the tray menu's Exit item (TrayService.Shutdown). The Exit
+            // exits via the tray menu's Quit item (TrayService.Shutdown). The Exit
             // event can't be used for this — it fires during shutdown and its args
             // have no way to cancel.
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
@@ -83,8 +82,7 @@ public partial class App : Avalonia.Application
 
             desktop.MainWindow = window;
 
-            BuildPopup(viewModel, desktop);
-            WireTray(viewModel, desktop);
+            WireTray(viewModel);
 
             viewModel.AlertRequested += (sender, e) => ShowAlert(e.Heading, e.Body);
 
@@ -107,28 +105,22 @@ public partial class App : Avalonia.Application
         base.OnFrameworkInitializationCompleted();
     }
 
-    private void BuildPopup(MainWindowViewModel viewModel, IClassicDesktopStyleApplicationLifetime desktop)
-    {
-        _popup = new TrayPopup { DataContext = viewModel };
-        _popup.OpenRequested += (sender, e) =>
-        {
-            if (_mainWindow is not null)
-            {
-                _placement?.ShowOnActiveScreen(_mainWindow);
-            }
-        };
-        _popup.ExitRequested += (sender, e) => desktop.Shutdown();
-    }
-
-    private void WireTray(MainWindowViewModel viewModel, IClassicDesktopStyleApplicationLifetime desktop)
+    private void WireTray(MainWindowViewModel viewModel)
     {
         if (_provider?.GetRequiredService<ITrayService>() is not TrayService tray)
         {
             return;
         }
 
-        // Left-click toggles the compact popup; "Open" escalates to the full window.
-        tray.PopupRequested += (sender, e) => Dispatcher.UIThread.Post(TogglePopup);
+        // The menu drives the same commands the window does, so the two can't diverge.
+        tray.StartRequested += (sender, e) => Run(viewModel.StartCommand);
+        tray.StartBreakRequested += (sender, e) => Run(viewModel.StartBreakCommand);
+        tray.PauseRequested += (sender, e) => Run(viewModel.PauseCommand);
+        tray.ResumeRequested += (sender, e) => Run(viewModel.ResumeCommand);
+        tray.SkipRequested += (sender, e) => Run(viewModel.SkipCommand);
+        tray.ResetRequested += (sender, e) => Run(viewModel.ResetCommand);
+        tray.StopRequested += (sender, e) => Run(viewModel.StopCommand);
+
         tray.OpenRequested += (sender, e) => Dispatcher.UIThread.Post(() =>
         {
             if (_mainWindow is not null)
@@ -138,21 +130,18 @@ public partial class App : Avalonia.Application
         });
     }
 
-    private void TogglePopup()
-    {
-        if (_popup is null)
+    /// <summary>
+    /// Menu clicks arrive on the platform's own thread; commands touch bound state, so
+    /// they have to be executed on the dispatcher.
+    /// </summary>
+    private static void Run(System.Windows.Input.ICommand command) =>
+        Dispatcher.UIThread.Post(() =>
         {
-            return;
-        }
-
-        if (_popup.IsVisible)
-        {
-            _popup.Hide();
-            return;
-        }
-
-        _placement?.ShowOnActiveScreen(_popup);
-    }
+            if (command.CanExecute(null))
+            {
+                command.Execute(null);
+            }
+        });
 
     private void ShowAlert(string heading, string body) =>
         Dispatcher.UIThread.Post(() => new AlertWindow(heading, body).Show());

@@ -471,9 +471,17 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             _ => "Ready"
         };
 
-        _trayService.UpdateTrayText(state.Mode == TimerMode.Idle
-            ? "Idle"
-            : $"{CurrentTime} — {(state.Mode == TimerMode.Study ? "Study" : "Break")}");
+        _trayService.UpdateStatus(new TrayStatus(
+            state.Mode == TimerMode.Idle ? "Idle" : CurrentTime,
+            state.Mode == TimerMode.Idle ? null : FormatShort(state.RemainingTime),
+            StatusText,
+            CanStart(),
+            CanStart(),
+            CanPause(),
+            CanResume(),
+            CanSkip(),
+            CanReset(),
+            CanStop()));
 
         StartCommand.NotifyCanExecuteChanged();
         StartBreakCommand.NotifyCanExecuteChanged();
@@ -482,6 +490,27 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         StopCommand.NotifyCanExecuteChanged();
         ResetCommand.NotifyCanExecuteChanged();
         SkipCommand.NotifyCanExecuteChanged();
+    }
+
+    /// <summary>
+    /// Abbreviated form for the menu bar icon: whole minutes, dropping to seconds for the
+    /// final minute. Kept to two or three characters so the digits can be drawn large
+    /// enough to read at a glance.
+    /// </summary>
+    /// <remarks>
+    /// Minutes round up, so 24:35 reads "25m" — a countdown that says 24 while 24 and a
+    /// half remain is understating what is left.
+    /// </remarks>
+    private static string FormatShort(TimeSpan value)
+    {
+        if (value < TimeSpan.Zero)
+        {
+            value = TimeSpan.Zero;
+        }
+
+        return value < TimeSpan.FromMinutes(1)
+            ? $"{value.Seconds}s"
+            : $"{(int)Math.Ceiling(value.TotalMinutes)}m";
     }
 
     /// <summary>

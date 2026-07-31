@@ -12,45 +12,169 @@ namespace FocusFlow.App.Services;
 /// (Shell_NotifyIcon on Windows, NSStatusItem on macOS).
 /// </summary>
 /// <remarks>
-/// Requests are surfaced as events rather than acted on directly. The popup shows the
-/// ViewModel, and the ViewModel needs ITrayService to update the tooltip — holding the
-/// window here would close that loop into a DI cycle. App wires the events up instead.
+/// <para>
+/// Everything lives on the native menu. Two attempts to open a window on click failed on
+/// macOS: with a menu attached the click goes to the menu, and with no menu attached
+/// Avalonia's macOS backend does not raise Clicked at all, which left the icon inert. The
+/// menu is the only surface the platform reliably gives us, so it carries the readout, the
+/// transport controls and both navigation actions.
+/// </para>
+/// <para>
+/// Actions are surfaced as events rather than acted on directly. The tray shows the
+/// ViewModel's state and the ViewModel needs ITrayService to push it — holding the
+/// ViewModel here would close that loop into a DI cycle. App wires the events up instead.
+/// </para>
 /// </remarks>
 public sealed class TrayService : ITrayService, IDisposable
 {
     private static readonly Uri IconUri = new("avares://FocusFlow.App/Assets/tray-icon.png");
 
     private readonly TrayIcon _trayIcon;
+    private readonly WindowIcon _staticIcon;
+
+    /// <summary>Bitmap currently displayed as the icon, kept so it can be released.</summary>
+    private RenderTargetBitmap? _renderedIcon;
+
+    /// <summary>Text the current icon shows, so it is only redrawn when the second flips.</summary>
+    private string? _renderedText;
+
+    private readonly NativeMenuItem _statusItem;
+    private readonly NativeMenuItem _startItem;
+    private readonly NativeMenuItem _breakItem;
+    private readonly NativeMenuItem _pauseItem;
+    private readonly NativeMenuItem _resumeItem;
+    private readonly NativeMenuItem _skipItem;
+    private readonly NativeMenuItem _resetItem;
+    private readonly NativeMenuItem _stopItem;
 
     public TrayService()
     {
-        var open = new NativeMenuItem("Open FocusFlow");
+        // Disabled on purpose: a readout, not an action.
+        _statusItem = new NativeMenuItem("FocusFlow") { IsEnabled = false };
+
+        _startItem = Action("Start", () => StartRequested);
+        _breakItem = Action("Take a Break", () => StartBreakRequested);
+        _pauseItem = Action("Pause", () => PauseRequested);
+        _resumeItem = Action("Resume", () => ResumeRequested);
+        _skipItem = Action("Skip", () => SkipRequested);
+        _resetItem = Action("Reset", () => ResetRequested);
+        _stopItem = Action("Stop", () => StopRequested);
+
+        var open = new NativeMenuItem("Open Main Window");
         open.Click += (_, _) => OpenRequested?.Invoke(this, EventArgs.Empty);
 
-        var exit = new NativeMenuItem("Exit");
-        exit.Click += (_, _) => Shutdown();
+        var quit = new NativeMenuItem("Quit");
+        quit.Click += (_, _) => Shutdown();
+
+        _staticIcon = new WindowIcon(new Bitmap(AssetLoader.Open(IconUri)));
 
         _trayIcon = new TrayIcon
         {
-            Icon = new WindowIcon(new Bitmap(AssetLoader.Open(IconUri))),
+            Icon = _staticIcon,
             ToolTipText = "FocusFlow",
             IsVisible = true,
-            Menu = new NativeMenu { open, exit },
+            Menu = new NativeMenu
+            {
+                _statusItem,
+                new NativeMenuItemSeparator(),
+                _startItem,
+                _breakItem,
+                _pauseItem,
+                _resumeItem,
+                _skipItem,
+                _resetItem,
+                _stopItem,
+                new NativeMenuItemSeparator(),
+                open,
+                quit
+            }
         };
 
-        // Left-click opens the compact popup; the full window sits behind "Open".
-        _trayIcon.Clicked += (_, _) => PopupRequested?.Invoke(this, EventArgs.Empty);
+        // Lets macOS invert the rendered countdown for a light or dark menu bar.
+        MacOSProperties.SetIsTemplateIcon(_trayIcon, true);
     }
 
-    /// <summary>Tray icon clicked — show the compact popup.</summary>
-    public event EventHandler? PopupRequested;
+    public event EventHandler? StartRequested;
+    public event EventHandler? StartBreakRequested;
+    public event EventHandler? PauseRequested;
+    public event EventHandler? ResumeRequested;
+    public event EventHandler? SkipRequested;
+    public event EventHandler? ResetRequested;
+    public event EventHandler? StopRequested;
 
-    /// <summary>"Open FocusFlow" chosen — show the full window.</summary>
+    /// <summary>"Open Main Window" chosen — show the full settings window.</summary>
     public event EventHandler? OpenRequested;
 
-    public void UpdateTrayText(string text)
+    public void UpdateStatus(TrayStatus status)
     {
-        _trayIcon.ToolTipText = $"FocusFlow - {text}";
+        ArgumentNullException.ThrowIfNull(status);
+
+        _trayIcon.ToolTipText = $"FocusFlow — {status.Time}";
+        _statusItem.Header = $"{status.Time}  ·  {status.Status}";
+
+        UpdateIcon(status);
+
+        // Hidden rather than greyed: a Pause entry that is permanently unavailable during
+        // a study session would dangle the very option the design removes.
+        _startItem.IsVisible = status.CanStart;
+        _breakItem.IsVisible = status.CanStartBreak;
+        _pauseItem.IsVisible = status.CanPause;
+        _resumeItem.IsVisible = status.CanResume;
+        _skipItem.IsVisible = status.CanSkip;
+        _resetItem.IsVisible = status.CanReset;
+        _stopItem.IsVisible = status.CanStop;
+    }
+
+    /// <summary>
+    /// Shows the countdown as the icon itself while a session runs, falling back to the
+    /// logo when idle.
+    /// </summary>
+    /// <remarks>
+    /// macOS only. A Windows tray icon is a small fixed square, so a wide text bitmap would
+    /// be squashed into something unreadable; there the tooltip carries the time.
+    /// </remarks>
+    private void UpdateIcon(TrayStatus status)
+    {
+        if (!OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
+        var text = status.CanStop ? status.IconLabel : null;
+
+        if (text == _renderedText)
+        {
+            return;
+        }
+
+        _renderedText = text;
+        var previous = _renderedIcon;
+
+        if (text is null)
+        {
+            _renderedIcon = null;
+            _trayIcon.Icon = _staticIcon;
+        }
+        else
+        {
+            _renderedIcon = TrayIconRenderer.Render(text);
+            _trayIcon.Icon = new WindowIcon(_renderedIcon);
+        }
+
+        // Released only after the replacement is in place — the tray still holds a
+        // reference to the old bitmap until then.
+        previous?.Dispose();
+    }
+
+    /// <summary>
+    /// Builds a menu item whose handler resolves the event lazily, so items can be created
+    /// before the events have subscribers.
+    /// </summary>
+    private NativeMenuItem Action(string header, Func<EventHandler?> handler)
+    {
+        var item = new NativeMenuItem(header);
+        item.Click += (_, _) => handler()?.Invoke(this, EventArgs.Empty);
+        return item;
     }
 
     /// <summary>
@@ -69,5 +193,6 @@ public sealed class TrayService : ITrayService, IDisposable
     {
         _trayIcon.IsVisible = false;
         _trayIcon.Dispose();
+        _renderedIcon?.Dispose();
     }
 }
