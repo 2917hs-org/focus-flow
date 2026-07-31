@@ -61,7 +61,7 @@
                  vertical space than two numbers warrant. -->
             <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
                 <StackPanel Grid.Column="0" Spacing="4">
-                    <TextBlock Text="Study (min)" />
+                    <TextBlock Text="Focus (min)" />
                     <NumericUpDown Value="{Binding StudyDuration, Mode=TwoWay}"
                                    Minimum="1" Maximum="120" Increment="5" FormatString="0"
                                    HorizontalAlignment="Stretch" />
@@ -78,7 +78,7 @@
                   RowSpacing="6">
                 <CheckBox Grid.Row="0" Grid.Column="0" Content="Auto-start breaks"
                           IsChecked="{Binding AutoStartBreak, Mode=TwoWay}" />
-                <CheckBox Grid.Row="0" Grid.Column="1" Content="Auto-start study"
+                <CheckBox Grid.Row="0" Grid.Column="1" Content="Auto-start focus"
                           IsChecked="{Binding AutoStartStudy, Mode=TwoWay}" />
                 <CheckBox Grid.Row="1" Grid.Column="0" Content="Infinite mode"
                           IsChecked="{Binding InfiniteMode, Mode=TwoWay}" />

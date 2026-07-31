@@ -107,6 +107,11 @@ public sealed class TrayService : ITrayService, IDisposable
             }
         };
 
+        // Windows raises this on left-click, and with the window hidden to the tray it is
+        // the obvious way back to it — without a handler the icon simply ignored clicks.
+        // macOS never raises it (the click goes to the menu), so this is a no-op there.
+        _trayIcon.Clicked += (_, _) => OpenRequested?.Invoke(this, EventArgs.Empty);
+
         // Lets macOS invert the rendered countdown for a light or dark menu bar.
         MacOSProperties.SetIsTemplateIcon(_trayIcon, true);
     }

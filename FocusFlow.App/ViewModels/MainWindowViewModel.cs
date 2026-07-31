@@ -359,7 +359,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         var (title, message) = e switch
         {
             { RunCompleted: true } => ("All sessions complete", "Nice work — that's the last one."),
-            { CompletedMode: TimerMode.Study } => ("Study session complete", "Time for a break."),
+            { CompletedMode: TimerMode.Study } => ("Focus session complete", "Time for a break."),
             _ => ("Break over", "Back to work.")
         };
 
@@ -404,11 +404,16 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private void OnReminderDue(object? sender, ReminderDueEventArgs e)
     {
         var minutes = Math.Max(1, (int)Math.Round(e.Remaining.TotalMinutes));
-        var what = e.Mode == TimerMode.Study ? "Study session" : "Break";
+        var what = e.Mode == TimerMode.Study ? "Focus session" : "Break";
 
         _notificationService.ShowNotification(
             $"{what} ending soon",
             $"About {minutes} minute(s) left.");
+
+        // Play it too. The whole point of the reminder is to reach someone who is heads-down
+        // and not looking at the screen, which a silent banner cannot do.
+        var config = _settings.Current;
+        _audioPlayer.Play(config.AlarmSoundPath, config.AlarmVolume);
     }
 
     /// <summary>
@@ -482,8 +487,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         StatusText = state.Mode switch
         {
             TimerMode.Idle => "Ready",
-            TimerMode.Study when state.IsPaused => $"Study paused — session {state.CurrentSession}{of}",
-            TimerMode.Study => $"Studying — session {state.CurrentSession}{of}",
+            TimerMode.Study when state.IsPaused => $"Focus paused — session {state.CurrentSession}{of}",
+            TimerMode.Study => $"Focus — session {state.CurrentSession}{of}",
             TimerMode.Break when state.IsPaused => "Break paused",
             TimerMode.Break => "On a break",
             _ => "Ready"
