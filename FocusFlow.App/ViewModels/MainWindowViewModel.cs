@@ -226,7 +226,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 ? "Couldn't update the login item."
                 : OperatingSystem.IsMacOS()
                     ? "Launch at login needs the packaged FocusFlow.app, not a dev build."
-                    : "Launch at login needs a published build, not 'dotnet run'.";
+                    : "Manage this in Settings > Apps > Startup, or use a non-packaged build.";
         }
     }
 
