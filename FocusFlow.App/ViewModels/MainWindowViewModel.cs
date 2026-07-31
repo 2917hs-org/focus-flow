@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -59,6 +60,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string _currentTime = "25:00";
     [ObservableProperty] private string _statusText = "Ready";
     [ObservableProperty] private string? _startupWarning;
+
+    /// <summary>
+    /// Colours the countdown and progress bar by what is running, so the mode is readable
+    /// at a glance without parsing the status line. Indigo matches the app icon.
+    /// </summary>
+    [ObservableProperty] private IBrush _modeBrush = ModeBrushes.Idle;
     [ObservableProperty] private string _todaySummary = "No sessions yet today";
 
     public MainWindowViewModel(
@@ -458,6 +465,15 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         SessionProgress = state.Mode == TimerMode.Idle || planned <= TimeSpan.Zero
             ? 0
             : Math.Clamp(1 - (state.RemainingTime.TotalSeconds / planned.TotalSeconds), 0, 1);
+
+        ModeBrush = state.Mode switch
+        {
+            TimerMode.Study when state.IsPaused => ModeBrushes.Paused,
+            TimerMode.Study => ModeBrushes.Study,
+            TimerMode.Break when state.IsPaused => ModeBrushes.Paused,
+            TimerMode.Break => ModeBrushes.Break,
+            _ => ModeBrushes.Idle
+        };
 
         var of = _settings.Current.InfiniteMode ? string.Empty : $" of {_settings.Current.SessionCount}";
 

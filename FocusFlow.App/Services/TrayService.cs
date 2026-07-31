@@ -27,7 +27,19 @@ namespace FocusFlow.App.Services;
 /// </remarks>
 public sealed class TrayService : ITrayService, IDisposable
 {
-    private static readonly Uri IconUri = new("avares://FocusFlow.App/Assets/tray-icon.png");
+    /// <summary>
+    /// macOS gets a monochrome template cut, Windows the full-colour logo.
+    /// </summary>
+    /// <remarks>
+    /// A template image is an alpha mask — macOS discards the colours and paints whatever
+    /// is opaque, inverting it for the menu bar's appearance. The colour logo has an
+    /// opaque body *and* an opaque brain, so under that treatment it collapses into one
+    /// featureless silhouette. The template cut knocks the brain out to negative space so
+    /// the mark still reads. Windows tray icons render in colour, so they use the original.
+    /// </remarks>
+    private static readonly Uri IdleIconUri = new(OperatingSystem.IsMacOS()
+        ? "avares://FocusFlow.App/Assets/tray-template.png"
+        : "avares://FocusFlow.App/Assets/app-icon.png");
 
     private readonly TrayIcon _trayIcon;
     private readonly WindowIcon _staticIcon;
@@ -66,7 +78,7 @@ public sealed class TrayService : ITrayService, IDisposable
         var quit = new NativeMenuItem("Quit");
         quit.Click += (_, _) => Shutdown();
 
-        _staticIcon = new WindowIcon(new Bitmap(AssetLoader.Open(IconUri)));
+        _staticIcon = new WindowIcon(new Bitmap(AssetLoader.Open(IdleIconUri)));
 
         _trayIcon = new TrayIcon
         {

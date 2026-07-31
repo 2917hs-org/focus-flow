@@ -17,6 +17,7 @@
 
     <PropertyGroup Condition="'$(IsWindowsTarget)' == 'true'">
         <ApplicationManifest>app.manifest</ApplicationManifest>
+        <ApplicationIcon>Assets\app-icon.ico</ApplicationIcon>
     </PropertyGroup>
 
     <!-- Platform folders are opt-in per TFM so macOS code never reaches the Windows
@@ -32,7 +33,9 @@
     </ItemGroup>
 
     <ItemGroup>
-        <AvaloniaResource Include="Assets/**" />
+        <!-- The .ico is a build input for ApplicationIcon, not something the app loads at
+             runtime, so it should not also be embedded as a resource. -->
+        <AvaloniaResource Include="Assets/**" Exclude="Assets/*.ico" />
     </ItemGroup>
 
     <ItemGroup>

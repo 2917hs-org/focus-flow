@@ -4,7 +4,88 @@
              RequestedThemeVariant="Default">
     <!-- "Default" ThemeVariant follows system theme variant. "Dark" or "Light" are other available options. -->
 
+    <Application.Resources>
+        <!-- Mid-toned and saturated on purpose: each of these carries white text and has to
+             stay legible against both the light and the dark theme, so a single value per
+             role avoids maintaining two palettes. -->
+        <SolidColorBrush x:Key="FfSuccess" Color="#2E9E5B" />
+        <SolidColorBrush x:Key="FfSuccessHover" Color="#34B368" />
+        <SolidColorBrush x:Key="FfSuccessPressed" Color="#26824A" />
+
+        <SolidColorBrush x:Key="FfDanger" Color="#D93636" />
+        <SolidColorBrush x:Key="FfDangerHover" Color="#E44A4A" />
+        <SolidColorBrush x:Key="FfDangerPressed" Color="#B92B2B" />
+
+        <SolidColorBrush x:Key="FfWarning" Color="#C77700" />
+        <SolidColorBrush x:Key="FfWarningHover" Color="#DE8804" />
+        <SolidColorBrush x:Key="FfWarningPressed" Color="#A66300" />
+
+        <SolidColorBrush x:Key="FfInfo" Color="#4F46E5" />
+        <SolidColorBrush x:Key="FfInfoHover" Color="#615AEA" />
+        <SolidColorBrush x:Key="FfInfoPressed" Color="#413ACC" />
+    </Application.Resources>
+
     <Application.Styles>
         <FluentTheme />
+
+        <!-- Fluent restyles the inner ContentPresenter on hover and press, so setting
+             Background on the Button alone would snap back to the theme colour the moment
+             the pointer arrived. Each role therefore needs all three states. -->
+
+        <Style Selector="Button.success">
+            <Setter Property="Background" Value="{StaticResource FfSuccess}" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+        </Style>
+        <Style Selector="Button.success:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource FfSuccessHover}" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+        <Style Selector="Button.success:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource FfSuccessPressed}" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+
+        <Style Selector="Button.danger">
+            <Setter Property="Background" Value="{StaticResource FfDanger}" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+        </Style>
+        <Style Selector="Button.danger:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource FfDangerHover}" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+        <Style Selector="Button.danger:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource FfDangerPressed}" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+
+        <Style Selector="Button.warning">
+            <Setter Property="Background" Value="{StaticResource FfWarning}" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+        </Style>
+        <Style Selector="Button.warning:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource FfWarningHover}" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+        <Style Selector="Button.warning:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource FfWarningPressed}" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+
+        <Style Selector="Button.info">
+            <Setter Property="Background" Value="{StaticResource FfInfo}" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+        </Style>
+        <Style Selector="Button.info:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource FfInfoHover}" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+        <Style Selector="Button.info:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource FfInfoPressed}" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
     </Application.Styles>
 </Application>

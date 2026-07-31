@@ -26,9 +26,14 @@ public sealed class WindowPlacementService : IWindowPlacementService
 
     public void ShowOnActiveScreen(Window window)
     {
-        var screen = ResolveTargetScreen(window);
+        // Only place it when it is actually being brought back from hidden or minimised.
+        // If the window is already on screen the user has put it where they want it, and
+        // yanking it to the middle of another display because that is where the pointer
+        // happens to be is disorienting — they asked to be shown the window, not to have
+        // it moved.
+        var isReturning = !window.IsVisible || window.WindowState == WindowState.Minimized;
 
-        if (screen is not null)
+        if (isReturning && ResolveTargetScreen(window) is { } screen)
         {
             // WorkingArea, not Bounds: respects the taskbar/Dock/menu bar so the window
             // isn't centred under them.
@@ -45,9 +50,18 @@ public sealed class WindowPlacementService : IWindowPlacementService
                 area.Y + ((area.Height - height) / 2));
         }
 
+        if (window.WindowState == WindowState.Minimized)
+        {
+            window.WindowState = WindowState.Normal;
+        }
+
         window.Show();
-        window.WindowState = WindowState.Normal;
+
+        // Raise and focus. Show() alone leaves an already-visible window exactly where it
+        // was in the stacking order, so choosing "Open Main Window" while it sat behind
+        // the editor would appear to do nothing at all.
         window.Activate();
+        window.Focus();
     }
 
     private Screen? ResolveTargetScreen(Window window)
