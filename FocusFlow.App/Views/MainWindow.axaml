@@ -5,7 +5,7 @@
         x:DataType="viewModels:MainWindowViewModel"
         Title="FocusFlow"
         Width="380"
-        Height="640"
+        Height="580"
         MinWidth="340"
         MinHeight="480">
 
@@ -46,17 +46,22 @@
             <StackPanel Spacing="12">
                 <TextBlock Text="Sessions" FontWeight="SemiBold" />
 
-                <StackPanel Spacing="4">
-                    <TextBlock Text="Study duration (1-120 minutes)" />
-                    <NumericUpDown Value="{Binding StudyDuration, Mode=TwoWay}"
-                                   Minimum="1" Maximum="120" Increment="5" FormatString="0" />
-                </StackPanel>
-
-                <StackPanel Spacing="4">
-                    <TextBlock Text="Break duration (1-60 minutes)" />
-                    <NumericUpDown Value="{Binding BreakDuration, Mode=TwoWay}"
-                                   Minimum="1" Maximum="60" Increment="1" FormatString="0" />
-                </StackPanel>
+                <!-- Paired on one row: two full-width spinners stacked took far more
+                     vertical space than two numbers warrant. -->
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+                    <StackPanel Grid.Column="0" Spacing="4">
+                        <TextBlock Text="Study (min)" />
+                        <NumericUpDown Value="{Binding StudyDuration, Mode=TwoWay}"
+                                       Minimum="1" Maximum="120" Increment="5" FormatString="0"
+                                       HorizontalAlignment="Stretch" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Spacing="4">
+                        <TextBlock Text="Break (min)" />
+                        <NumericUpDown Value="{Binding BreakDuration, Mode=TwoWay}"
+                                       Minimum="1" Maximum="60" Increment="1" FormatString="0"
+                                       HorizontalAlignment="Stretch" />
+                    </StackPanel>
+                </Grid>
 
                 <CheckBox Content="Start breaks automatically"
                           IsChecked="{Binding AutoStartBreak, Mode=TwoWay}" />
@@ -65,19 +70,25 @@
                 <CheckBox Content="Infinite mode (repeat until stopped)"
                           IsChecked="{Binding InfiniteMode, Mode=TwoWay}" />
 
-                <StackPanel Spacing="4" IsEnabled="{Binding IsSessionCountEnabled}">
-                    <TextBlock Text="Sessions per run (1-10)" />
-                    <NumericUpDown Value="{Binding SessionCount, Mode=TwoWay}"
-                                   Minimum="1" Maximum="10" Increment="1" FormatString="0" />
-                </StackPanel>
-
                 <CheckBox Content="Remind me before a session ends"
                           IsChecked="{Binding ReminderEnabled, Mode=TwoWay}" />
-                <StackPanel Spacing="4" IsEnabled="{Binding ReminderEnabled}">
-                    <TextBlock Text="Remind me this many minutes before the end" />
-                    <NumericUpDown Value="{Binding ReminderLeadMinutes, Mode=TwoWay}"
-                                   Minimum="1" Maximum="10" Increment="1" FormatString="0" />
-                </StackPanel>
+
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+                    <StackPanel Grid.Column="0" Spacing="4"
+                                IsEnabled="{Binding IsSessionCountEnabled}">
+                        <TextBlock Text="Sessions per run" />
+                        <NumericUpDown Value="{Binding SessionCount, Mode=TwoWay}"
+                                       Minimum="1" Maximum="10" Increment="1" FormatString="0"
+                                       HorizontalAlignment="Stretch" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Spacing="4"
+                                IsEnabled="{Binding ReminderEnabled}">
+                        <TextBlock Text="Remind before (min)" />
+                        <NumericUpDown Value="{Binding ReminderLeadMinutes, Mode=TwoWay}"
+                                       Minimum="1" Maximum="10" Increment="1" FormatString="0"
+                                       HorizontalAlignment="Stretch" />
+                    </StackPanel>
+                </Grid>
 
                 <Separator />
                 <TextBlock Text="Sound" FontWeight="SemiBold" />

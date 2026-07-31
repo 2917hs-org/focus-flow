@@ -47,6 +47,30 @@ public sealed class SingleInstanceGuard : IDisposable
     /// </summary>
     public bool TryAcquire()
     {
+        // Retry briefly before concluding another instance is running. Quitting and
+        // relaunching immediately would otherwise fail silently: the outgoing process can
+        // still hold the lock for a moment after its window has gone.
+        for (var attempt = 0; attempt < 4; attempt++)
+        {
+            if (attempt > 0)
+            {
+                Thread.Sleep(250);
+            }
+
+            if (TryOpenLock())
+            {
+                StartWatchingForSignals();
+                return true;
+            }
+        }
+
+        // Genuinely already running: poke it, then let the caller bow out.
+        SignalRunningInstance();
+        return false;
+    }
+
+    private bool TryOpenLock()
+    {
         try
         {
             _lock = new FileStream(
@@ -59,8 +83,6 @@ public sealed class SingleInstanceGuard : IDisposable
         }
         catch (IOException)
         {
-            // Held by the running instance: poke it, then let the caller bow out.
-            SignalRunningInstance();
             return false;
         }
         catch (UnauthorizedAccessException)
@@ -69,7 +91,6 @@ public sealed class SingleInstanceGuard : IDisposable
             return true;
         }
 
-        StartWatchingForSignals();
         return true;
     }
 
