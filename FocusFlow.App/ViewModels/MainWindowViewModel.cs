@@ -1,0 +1,443 @@
+using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
+using Avalonia.Styling;
+using Avalonia.Threading;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using FocusFlow.App.Services;
+using FocusFlow.Application.Interfaces;
+using FocusFlow.Application.Services;
+using FocusFlow.Domain.Interfaces;
+using FocusFlow.Domain.Models;
+
+namespace FocusFlow.App.ViewModels;
+
+public partial class MainWindowViewModel : ObservableObject, IDisposable
+{
+    private readonly ITimerService _timerService;
+    private readonly INotificationService _notificationService;
+    private readonly IAudioPlayer _audioPlayer;
+    private readonly ITrayService _trayService;
+    private readonly ISettingsService _settings;
+    private readonly IStartupService _startupService;
+    private readonly IFilePickerService _filePicker;
+    private readonly SessionHistoryService _history;
+
+    /// <summary>
+    /// Set while pushing stored settings into the bound properties, so the resulting
+    /// change notifications don't loop straight back into <see cref="ISettingsService"/>.
+    /// </summary>
+    private bool _loadingSettings;
+
+    private bool _disposed;
+
+    [ObservableProperty] private int _studyDuration;
+    [ObservableProperty] private int _breakDuration;
+    [ObservableProperty] private bool _autoStartBreak;
+    [ObservableProperty] private bool _autoStartStudy;
+    [ObservableProperty] private bool _infiniteMode;
+    [ObservableProperty] private int _sessionCount;
+    [ObservableProperty] private AlarmSound? _selectedSound;
+    [ObservableProperty] private int _alarmVolume;
+    [ObservableProperty] private string? _musicPath;
+    [ObservableProperty] private bool _playMusicAfterBreak;
+    [ObservableProperty] private bool _launchOnStartup;
+    [ObservableProperty] private AppTheme _theme;
+
+    [ObservableProperty] private string _currentTime = "25:00";
+    [ObservableProperty] private string _statusText = "Ready";
+    [ObservableProperty] private string? _startupWarning;
+    [ObservableProperty] private string _todaySummary = "No sessions yet today";
+
+    public MainWindowViewModel(
+        ITimerService timerService,
+        INotificationService notificationService,
+        IAudioPlayer audioPlayer,
+        ITrayService trayService,
+        ISettingsService settings,
+        IStartupService startupService,
+        IFilePickerService filePicker,
+        SessionHistoryService history)
+    {
+        _timerService = timerService;
+        _notificationService = notificationService;
+        _audioPlayer = audioPlayer;
+        _trayService = trayService;
+        _settings = settings;
+        _startupService = startupService;
+        _filePicker = filePicker;
+        _history = history;
+
+        AvailableSounds = new ObservableCollection<AlarmSound>(audioPlayer.AvailableSounds);
+
+        LoadFromSettings();
+
+        _timerService.TimerUpdated += OnTimerUpdated;
+        _timerService.SessionEnded += OnSessionEnded;
+        _timerService.SystemResumed += OnSystemResumed;
+
+        Apply(_timerService.CurrentState);
+        RefreshTodaySummary();
+    }
+
+    public ObservableCollection<AlarmSound> AvailableSounds { get; }
+
+    public IReadOnlyList<AppTheme> AvailableThemes { get; } =
+        [AppTheme.System, AppTheme.Light, AppTheme.Dark];
+
+    public bool IsStartupSupported => _startupService.IsSupported;
+
+    /// <summary>Session count only applies when the run is finite (FR-006 vs FR-007).</summary>
+    public bool IsSessionCountEnabled => !InfiniteMode;
+
+    private void LoadFromSettings()
+    {
+        var config = _settings.Current;
+
+        _loadingSettings = true;
+        try
+        {
+            StudyDuration = (int)Math.Round(config.StudyDuration.TotalMinutes);
+            BreakDuration = (int)Math.Round(config.BreakDuration.TotalMinutes);
+            AutoStartBreak = config.AutoStartBreak;
+            AutoStartStudy = config.AutoStartStudy;
+            InfiniteMode = config.InfiniteMode;
+            SessionCount = config.SessionCount;
+            AlarmVolume = config.AlarmVolume;
+            MusicPath = config.MusicPath;
+            PlayMusicAfterBreak = config.PlayMusicAfterBreak;
+            Theme = config.Theme;
+            SelectedSound = ResolveSound(config.AlarmSoundPath);
+
+            // Trust the OS over the config file: the user may have removed the login item
+            // outside the app, and the checkbox should reflect reality.
+            LaunchOnStartup = _startupService.IsSupported
+                ? _startupService.IsEnabled()
+                : config.LaunchOnStartup;
+        }
+        finally
+        {
+            _loadingSettings = false;
+        }
+
+        ApplyTheme(Theme);
+    }
+
+    /// <summary>
+    /// Finds the stored sound in the built-in list, adding an entry for a custom file so
+    /// the picker can show what is actually selected.
+    /// </summary>
+    private AlarmSound? ResolveSound(string? value)
+    {
+        var match = AvailableSounds.FirstOrDefault(s => s.Value == value);
+        if (match is not null)
+        {
+            return match;
+        }
+
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return AvailableSounds.FirstOrDefault();
+        }
+
+        var custom = new AlarmSound(Path.GetFileName(value), value);
+        AvailableSounds.Add(custom);
+        return custom;
+    }
+
+    // Generated by [ObservableProperty]; each persists the edit.
+    partial void OnStudyDurationChanged(int value) =>
+        Persist(c => c.StudyDuration = TimeSpan.FromMinutes(value));
+
+    partial void OnBreakDurationChanged(int value) =>
+        Persist(c => c.BreakDuration = TimeSpan.FromMinutes(value));
+
+    partial void OnAutoStartBreakChanged(bool value) => Persist(c => c.AutoStartBreak = value);
+
+    partial void OnAutoStartStudyChanged(bool value) => Persist(c => c.AutoStartStudy = value);
+
+    partial void OnSessionCountChanged(int value) => Persist(c => c.SessionCount = value);
+
+    partial void OnAlarmVolumeChanged(int value) => Persist(c => c.AlarmVolume = value);
+
+    partial void OnMusicPathChanged(string? value) => Persist(c => c.MusicPath = value);
+
+    partial void OnPlayMusicAfterBreakChanged(bool value) => Persist(c => c.PlayMusicAfterBreak = value);
+
+    partial void OnSelectedSoundChanged(AlarmSound? value) =>
+        Persist(c => c.AlarmSoundPath = value?.Value);
+
+    partial void OnInfiniteModeChanged(bool value)
+    {
+        Persist(c => c.InfiniteMode = value);
+        OnPropertyChanged(nameof(IsSessionCountEnabled));
+    }
+
+    partial void OnThemeChanged(AppTheme value)
+    {
+        Persist(c => c.Theme = value);
+        ApplyTheme(value);
+    }
+
+    partial void OnLaunchOnStartupChanged(bool value)
+    {
+        if (_loadingSettings)
+        {
+            return;
+        }
+
+        // Only record the preference if the OS actually accepted the change, so the
+        // checkbox can't claim something that didn't happen.
+        if (_startupService.SetEnabled(value))
+        {
+            StartupWarning = null;
+            Persist(c => c.LaunchOnStartup = value);
+        }
+        else
+        {
+            StartupWarning = _startupService.IsSupported
+                ? "Couldn't update the login item."
+                : "Launch on startup needs a published build (it does nothing under 'dotnet run').";
+        }
+    }
+
+    private static void ApplyTheme(AppTheme theme)
+    {
+        if (Avalonia.Application.Current is not { } app)
+        {
+            return;
+        }
+
+        app.RequestedThemeVariant = theme switch
+        {
+            AppTheme.Light => ThemeVariant.Light,
+            AppTheme.Dark => ThemeVariant.Dark,
+            _ => ThemeVariant.Default
+        };
+    }
+
+    private void Persist(Action<TimerConfig> mutate)
+    {
+        if (_loadingSettings)
+        {
+            return;
+        }
+
+        _settings.Update(mutate);
+    }
+
+    [RelayCommand(CanExecute = nameof(CanStart))]
+    private async Task Start()
+    {
+        // Settings are already normalized and persisted, so the engine gets a validated
+        // config rather than whatever is currently typed in the boxes.
+        await _timerService.StartAsync(_settings.Current);
+    }
+
+    /// <summary>FR-002. Runs a break on its own.</summary>
+    [RelayCommand(CanExecute = nameof(CanStart))]
+    private async Task StartBreak() => await _timerService.StartBreakAsync(_settings.Current);
+
+    [RelayCommand(CanExecute = nameof(CanPause))]
+    private void Pause() => _timerService.Pause();
+
+    [RelayCommand(CanExecute = nameof(CanResume))]
+    private void Resume() => _timerService.Resume();
+
+    [RelayCommand(CanExecute = nameof(CanStop))]
+    private void Stop() => _timerService.Stop();
+
+    [RelayCommand(CanExecute = nameof(CanReset))]
+    private void Reset() => _timerService.Reset();
+
+    /// <summary>FR-005.</summary>
+    [RelayCommand(CanExecute = nameof(CanSkip))]
+    private void Skip() => _timerService.Skip();
+
+    [RelayCommand]
+    private void TestSound() => _audioPlayer.Play(SelectedSound?.Value, AlarmVolume);
+
+    [RelayCommand]
+    private async Task BrowseAlarm()
+    {
+        var path = await _filePicker.PickAudioFileAsync("Choose an alarm sound", _audioPlayer.SupportedExtensions);
+        if (path is not null)
+        {
+            SelectedSound = ResolveSound(path);
+        }
+    }
+
+    [RelayCommand]
+    private async Task BrowseMusic()
+    {
+        var path = await _filePicker.PickAudioFileAsync("Choose music", _audioPlayer.SupportedExtensions);
+        if (path is not null)
+        {
+            MusicPath = path;
+        }
+    }
+
+    [RelayCommand]
+    private void StopAudio() => _audioPlayer.Stop();
+
+    private bool CanStart() => !IsSessionActive;
+    private bool CanPause() => IsSessionActive && !IsPaused;
+    private bool CanResume() => IsSessionActive && IsPaused;
+    private bool CanStop() => IsSessionActive;
+    private bool CanReset() => IsSessionActive;
+    private bool CanSkip() => IsSessionActive;
+
+    private bool IsSessionActive { get; set; }
+    private bool IsPaused { get; set; }
+
+    private void OnTimerUpdated(object? sender, TimerUpdatedEventArgs e) =>
+        OnUiThread(() => Apply(e.State));
+
+    private void OnSessionEnded(object? sender, SessionEndedEventArgs e)
+    {
+        // The history service is subscribed to the same event; refresh after it writes.
+        RefreshTodaySummary();
+
+        // Only a session that actually ran out deserves an alert. Skipping is deliberate,
+        // and stopping now raises this event too so the history log sees the partial
+        // session — neither should set off an alarm.
+        if (e.Outcome != SessionOutcome.Completed)
+        {
+            return;
+        }
+
+        var (title, message) = e switch
+        {
+            { RunCompleted: true } => ("All sessions complete", "Nice work — that's the last one."),
+            { CompletedMode: TimerMode.Study } => ("Study session complete", "Time for a break."),
+            _ => ("Break over", "Back to work.")
+        };
+
+        // Notifications and sound are platform calls, not UI-thread work, so they run
+        // straight off the timer thread.
+        _notificationService.ShowNotification(title, message);
+
+        var config = _settings.Current;
+
+        // FR-010: after a break, music replaces the alarm rather than fighting it for the
+        // audio device.
+        if (e.CompletedMode == TimerMode.Break
+            && config.PlayMusicAfterBreak
+            && !string.IsNullOrWhiteSpace(config.MusicPath))
+        {
+            _audioPlayer.Play(config.MusicPath, config.AlarmVolume);
+            return;
+        }
+
+        _audioPlayer.Play(config.AlarmSoundPath, config.AlarmVolume);
+    }
+
+    /// <summary>
+    /// Reads back today's totals from the history log. Deliberately minimal — reporting
+    /// proper is a later piece of work; this exists so the stored data is visibly in use
+    /// rather than write-only.
+    /// </summary>
+    private void RefreshTodaySummary()
+    {
+        var midnightLocal = new DateTimeOffset(DateTime.Today, DateTimeOffset.Now.Offset);
+        var summary = _history.Summarise(midnightLocal);
+
+        var focus = summary.TotalStudyTime;
+        var text = summary.CompletedStudySessions == 0 && focus < TimeSpan.FromMinutes(1)
+            ? "No sessions yet today"
+            : $"Today: {(int)focus.TotalHours}h {focus.Minutes:D2}m focused · "
+              + $"{summary.CompletedStudySessions} session(s) completed";
+
+        OnUiThread(() => TodaySummary = text);
+    }
+
+    /// <summary>
+    /// FR-101. The engine already excludes the suspended time from the session; this just
+    /// tells the user why the clock did not move while the lid was shut.
+    /// </summary>
+    private void OnSystemResumed(object? sender, SystemResumedEventArgs e)
+    {
+        var minutes = (int)Math.Round(e.SuspendedFor.TotalMinutes);
+        var howLong = minutes >= 1 ? $"{minutes} min" : $"{(int)e.SuspendedFor.TotalSeconds}s";
+
+        OnUiThread(() => StatusText = $"Resumed after {howLong} asleep — timer was held");
+    }
+
+    /// <summary>
+    /// The engine ticks on a timer thread; every property write below raises
+    /// PropertyChanged, which bindings must receive on the dispatcher thread.
+    /// </summary>
+    private static void OnUiThread(Action action)
+    {
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            action();
+        }
+        else
+        {
+            Dispatcher.UIThread.Post(action);
+        }
+    }
+
+    private void Apply(SessionState state)
+    {
+        CurrentTime = Format(state.RemainingTime);
+        IsSessionActive = state.Mode != TimerMode.Idle;
+        IsPaused = state.IsPaused;
+
+        var of = _settings.Current.InfiniteMode ? string.Empty : $" of {_settings.Current.SessionCount}";
+
+        StatusText = state.Mode switch
+        {
+            TimerMode.Idle => "Ready",
+            TimerMode.Study when state.IsPaused => $"Study paused — session {state.CurrentSession}{of}",
+            TimerMode.Study => $"Studying — session {state.CurrentSession}{of}",
+            TimerMode.Break when state.IsPaused => "Break paused",
+            TimerMode.Break => "On a break",
+            _ => "Ready"
+        };
+
+        _trayService.UpdateTrayText(state.Mode == TimerMode.Idle
+            ? "Idle"
+            : $"{CurrentTime} — {(state.Mode == TimerMode.Study ? "Study" : "Break")}");
+
+        StartCommand.NotifyCanExecuteChanged();
+        StartBreakCommand.NotifyCanExecuteChanged();
+        PauseCommand.NotifyCanExecuteChanged();
+        ResumeCommand.NotifyCanExecuteChanged();
+        StopCommand.NotifyCanExecuteChanged();
+        ResetCommand.NotifyCanExecuteChanged();
+        SkipCommand.NotifyCanExecuteChanged();
+    }
+
+    /// <summary>
+    /// Formats as mm:ss, rolling hours into the minutes field. TimeSpan.Minutes alone
+    /// would render a 90-minute session as "30:00".
+    /// </summary>
+    private static string Format(TimeSpan value)
+    {
+        if (value < TimeSpan.Zero)
+        {
+            value = TimeSpan.Zero;
+        }
+
+        return $"{(int)value.TotalMinutes:D2}:{value.Seconds:D2}";
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        _timerService.TimerUpdated -= OnTimerUpdated;
+        _timerService.SessionEnded -= OnSessionEnded;
+        _timerService.SystemResumed -= OnSystemResumed;
+    }
+}

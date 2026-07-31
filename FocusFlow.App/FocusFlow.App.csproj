@@ -1,0 +1,63 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>WinExe</OutputType>
+        <!-- net10.0 covers macOS (and Linux); the -windows TFM exists only so the
+             Windows build can use Action Center toasts via Microsoft.Toolkit.Uwp.Notifications,
+             whose ToastNotificationManagerCompat ships only in its net*-windows10.0.17763 asset.
+             The SDK auto-defines the WINDOWS symbol for the -windows TFM. -->
+        <TargetFrameworks>net10.0;net10.0-windows10.0.17763.0</TargetFrameworks>
+        <!-- Lets the Windows ref packs restore on macOS/Linux so both TFMs build there.
+             Ignored when building on Windows. -->
+        <EnableWindowsTargeting>true</EnableWindowsTargeting>
+        <Nullable>enable</Nullable>
+        <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
+        <IsWindowsTarget>false</IsWindowsTarget>
+        <IsWindowsTarget Condition="$(TargetFramework.Contains('-windows'))">true</IsWindowsTarget>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="'$(IsWindowsTarget)' == 'true'">
+        <ApplicationManifest>app.manifest</ApplicationManifest>
+    </PropertyGroup>
+
+    <!-- Platform folders are opt-in per TFM so macOS code never reaches the Windows
+         build and vice versa. -->
+    <ItemGroup>
+        <Compile Remove="Platforms/**/*.cs" />
+    </ItemGroup>
+    <ItemGroup Condition="'$(IsWindowsTarget)' == 'true'">
+        <Compile Include="Platforms/Windows/**/*.cs" />
+    </ItemGroup>
+    <ItemGroup Condition="'$(IsWindowsTarget)' != 'true'">
+        <Compile Include="Platforms/MacOS/**/*.cs" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <AvaloniaResource Include="Assets/**" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Avalonia" Version="12.1.1" />
+        <PackageReference Include="Avalonia.Desktop" Version="12.1.1" />
+        <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.1" />
+        <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.1" />
+        <PackageReference Include="AvaloniaUI.DiagnosticsSupport" Version="2.2.3">
+            <IncludeAssets Condition="'$(Configuration)' != 'Debug'">None</IncludeAssets>
+            <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
+        </PackageReference>
+        <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="11.0.0-preview.6.26359.118" />
+    </ItemGroup>
+
+    <ItemGroup Condition="'$(IsWindowsTarget)' == 'true'">
+        <PackageReference Include="Microsoft.Toolkit.Uwp.Notifications" Version="7.1.3" />
+        <!-- The toolkit pulls System.Drawing.Common 4.7.0 transitively, which carries a
+             critical advisory (GHSA-rxg9-xrhp-64gj). Nothing here uses System.Drawing, but
+             the reference has to resolve, so pin it forward to a patched version. -->
+        <PackageReference Include="System.Drawing.Common" Version="9.0.0" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\FocusFlow.Application\FocusFlow.Application.csproj" />
+        <ProjectReference Include="..\FocusFlow.Infrastructure\FocusFlow.Infrastructure.csproj" />
+    </ItemGroup>
+</Project>

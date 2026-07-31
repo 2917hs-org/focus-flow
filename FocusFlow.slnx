@@ -1,0 +1,7 @@
+<Solution>
+    <Project Path="FocusFlow.App/FocusFlow.App.csproj"/>
+    <Project Path="FocusFlow.Application/FocusFlow.Application.csproj"/>
+    <Project Path="FocusFlow.Domain.Tests/FocusFlow.Domain.Tests.csproj"/>
+    <Project Path="FocusFlow.Domain/FocusFlow.Domain.csproj"/>
+    <Project Path="FocusFlow.Infrastructure/FocusFlow.Infrastructure.csproj"/>
+</Solution>

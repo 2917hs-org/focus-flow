@@ -1,0 +1,130 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:viewModels="using:FocusFlow.App.ViewModels"
+        x:Class="FocusFlow.App.Views.MainWindow"
+        x:DataType="viewModels:MainWindowViewModel"
+        Title="FocusFlow"
+        Width="380"
+        Height="640"
+        MinWidth="340"
+        MinHeight="480">
+
+    <ScrollViewer>
+        <StackPanel Margin="24" Spacing="18">
+
+            <!-- Countdown -->
+            <StackPanel Spacing="4">
+                <TextBlock Text="{Binding CurrentTime}"
+                           FontSize="56"
+                           FontWeight="Light"
+                           HorizontalAlignment="Center" />
+                <TextBlock Text="{Binding StatusText}"
+                           Opacity="0.7"
+                           HorizontalAlignment="Center" />
+            </StackPanel>
+
+            <TextBlock Text="{Binding TodaySummary}"
+                       HorizontalAlignment="Center" FontSize="12" Opacity="0.65"
+                       TextWrapping="Wrap" TextAlignment="Center" />
+
+            <!-- Transport -->
+            <WrapPanel HorizontalAlignment="Center" ItemSpacing="8" LineSpacing="8">
+                <Button Content="Start" Command="{Binding StartCommand}" />
+                <Button Content="Break" Command="{Binding StartBreakCommand}" />
+                <Button Content="Pause" Command="{Binding PauseCommand}" />
+                <Button Content="Resume" Command="{Binding ResumeCommand}" />
+                <Button Content="Skip" Command="{Binding SkipCommand}" />
+                <Button Content="Reset" Command="{Binding ResetCommand}" />
+                <Button Content="Stop" Command="{Binding StopCommand}" />
+            </WrapPanel>
+
+            <Separator />
+
+            <!-- Settings; every change is saved automatically -->
+            <StackPanel Spacing="12">
+                <TextBlock Text="Sessions" FontWeight="SemiBold" />
+
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Study duration (1-120 minutes)" />
+                    <NumericUpDown Value="{Binding StudyDuration, Mode=TwoWay}"
+                                   Minimum="1" Maximum="120" Increment="5" FormatString="0" />
+                </StackPanel>
+
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Break duration (1-60 minutes)" />
+                    <NumericUpDown Value="{Binding BreakDuration, Mode=TwoWay}"
+                                   Minimum="1" Maximum="60" Increment="1" FormatString="0" />
+                </StackPanel>
+
+                <CheckBox Content="Start breaks automatically"
+                          IsChecked="{Binding AutoStartBreak, Mode=TwoWay}" />
+                <CheckBox Content="Start study sessions automatically"
+                          IsChecked="{Binding AutoStartStudy, Mode=TwoWay}" />
+                <CheckBox Content="Infinite mode (repeat until stopped)"
+                          IsChecked="{Binding InfiniteMode, Mode=TwoWay}" />
+
+                <StackPanel Spacing="4" IsEnabled="{Binding IsSessionCountEnabled}">
+                    <TextBlock Text="Sessions per run (1-10)" />
+                    <NumericUpDown Value="{Binding SessionCount, Mode=TwoWay}"
+                                   Minimum="1" Maximum="10" Increment="1" FormatString="0" />
+                </StackPanel>
+
+                <Separator />
+                <TextBlock Text="Sound" FontWeight="SemiBold" />
+
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Alarm sound" />
+                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                        <ComboBox Grid.Column="0"
+                                  HorizontalAlignment="Stretch"
+                                  ItemsSource="{Binding AvailableSounds}"
+                                  SelectedItem="{Binding SelectedSound, Mode=TwoWay}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Name}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <Button Grid.Column="1" Content="Browse…" Command="{Binding BrowseAlarmCommand}" />
+                        <Button Grid.Column="2" Content="Test" Command="{Binding TestSoundCommand}" />
+                    </Grid>
+                </StackPanel>
+
+                <StackPanel Spacing="4">
+                    <TextBlock Text="{Binding AlarmVolume, StringFormat='Volume: {0}%'}" />
+                    <Slider Value="{Binding AlarmVolume, Mode=TwoWay}"
+                            Minimum="0" Maximum="100" TickFrequency="10" IsSnapToTickEnabled="True" />
+                </StackPanel>
+
+                <CheckBox Content="Play music when a break ends"
+                          IsChecked="{Binding PlayMusicAfterBreak, Mode=TwoWay}" />
+                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                    <TextBox Grid.Column="0" Text="{Binding MusicPath}" PlaceholderText="No music selected"
+                             IsReadOnly="True" />
+                    <Button Grid.Column="1" Content="Browse…" Command="{Binding BrowseMusicCommand}" />
+                    <Button Grid.Column="2" Content="Stop" Command="{Binding StopAudioCommand}" />
+                </Grid>
+
+                <Separator />
+                <TextBlock Text="Application" FontWeight="SemiBold" />
+
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Theme" />
+                    <ComboBox HorizontalAlignment="Stretch"
+                              ItemsSource="{Binding AvailableThemes}"
+                              SelectedItem="{Binding Theme, Mode=TwoWay}" />
+                </StackPanel>
+
+                <CheckBox Content="Launch FocusFlow at login"
+                          IsChecked="{Binding LaunchOnStartup, Mode=TwoWay}"
+                          IsEnabled="{Binding IsStartupSupported}" />
+                <TextBlock Text="{Binding StartupWarning}"
+                           IsVisible="{Binding StartupWarning, Converter={x:Static ObjectConverters.IsNotNull}}"
+                           FontSize="11" Opacity="0.75" TextWrapping="Wrap" />
+            </StackPanel>
+
+            <TextBlock Text="Closing this window keeps FocusFlow running in the tray."
+                       FontSize="11" Opacity="0.6" TextWrapping="Wrap" />
+        </StackPanel>
+    </ScrollViewer>
+</Window>
