@@ -40,6 +40,12 @@ public sealed class TimerService : ITimerService, IDisposable
         return Task.CompletedTask;
     }
 
+    public Task StartPredefinedAsync(TimerConfig config, TimeSpan duration)
+    {
+        _timerEngine.StartPredefined(config, duration);
+        return Task.CompletedTask;
+    }
+
     public void Pause() => _timerEngine.Pause();
 
     public void Resume() => _timerEngine.Resume();

@@ -35,8 +35,11 @@ public interface ITimerService
 
     Task StartAsync(TimerConfig config);
 
-    /// <summary>FR-002. Runs a single break with no study session attached.</summary>
+    /// <summary>FR-002. Runs a single break with no focus session attached.</summary>
     Task StartBreakAsync(TimerConfig config);
+
+    /// <summary>Runs one focus session of the given length, then stops.</summary>
+    Task StartPredefinedAsync(TimerConfig config, TimeSpan duration);
 
     void Pause();
     void Resume();

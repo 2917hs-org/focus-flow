@@ -140,8 +140,11 @@ public interface ITimerEngine
     /// <summary>Starts a fresh run at study session 1.</summary>
     void Start(TimerConfig config);
 
-    /// <summary>FR-002. Starts a standalone break without running a study session first.</summary>
+    /// <summary>FR-002. Starts a standalone break without running a focus session first.</summary>
     void StartBreak(TimerConfig config);
+
+    /// <summary>Runs one focus session of the given length, then stops.</summary>
+    void StartPredefined(TimerConfig config, TimeSpan duration);
 
     void Pause();
     void Resume();

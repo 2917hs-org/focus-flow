@@ -119,6 +119,13 @@ public partial class App : Avalonia.Application
         // The menu drives the same commands the window does, so the two can't diverge.
         tray.StartRequested += (sender, e) => Run(viewModel.StartCommand);
         tray.StartBreakRequested += (sender, e) => Run(viewModel.StartBreakCommand);
+        tray.PredefinedRequested += (sender, minutes) => Dispatcher.UIThread.Post(() =>
+        {
+            if (viewModel.StartPredefinedCommand.CanExecute(minutes))
+            {
+                viewModel.StartPredefinedCommand.Execute(minutes);
+            }
+        });
         tray.PauseRequested += (sender, e) => Run(viewModel.PauseCommand);
         tray.ResumeRequested += (sender, e) => Run(viewModel.ResumeCommand);
         tray.SkipRequested += (sender, e) => Run(viewModel.SkipCommand);

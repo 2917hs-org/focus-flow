@@ -267,6 +267,14 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     [RelayCommand(CanExecute = nameof(CanStart))]
     private async Task StartBreak() => await _timerService.StartBreakAsync(_settings.Current);
 
+    /// <summary>
+    /// Starts a fixed-length focus session that stops when it's done. Nothing follows it,
+    /// so going again is a deliberate choice rather than something that just happens.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanStart))]
+    private async Task StartPredefined(int minutes) =>
+        await _timerService.StartPredefinedAsync(_settings.Current, TimeSpan.FromMinutes(minutes));
+
     [RelayCommand(CanExecute = nameof(CanPause))]
     private void Pause() => _timerService.Pause();
 
