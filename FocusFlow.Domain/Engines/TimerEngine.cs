@@ -44,11 +44,11 @@ public sealed class TimerEngine : ITimerEngine, IDisposable
     private int _currentSession = 1;
 
     /// <summary>
-    /// True when the current break was started on its own via <see cref="StartBreak"/>
-    /// rather than as part of a study cycle, so finishing it ends the run instead of
-    /// rolling into a study session the user never asked for.
+    /// True for a one-shot run — a standalone break, or a predefined focus session of a
+    /// fixed length. Finishing it returns to idle rather than rolling into the next
+    /// session, so the user has to deliberately start another.
     /// </summary>
-    private bool _standaloneBreak;
+    private bool _singleSession;
 
     /// <summary>Timestamp when the running segment began.</summary>
     private long _segmentStart;
@@ -104,8 +104,25 @@ public sealed class TimerEngine : ITimerEngine, IDisposable
     /// </summary>
     public void Start(TimerConfig config) => BeginRun(config, TimerMode.Study, standalone: false);
 
-    /// <summary>FR-002. Runs a single break with no study session attached.</summary>
+    /// <summary>FR-002. Runs a single break with no focus session attached.</summary>
     public void StartBreak(TimerConfig config) => BeginRun(config, TimerMode.Break, standalone: true);
+
+    /// <summary>
+    /// Runs one focus session of <paramref name="duration"/> and then stops.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately not a cycle: no break follows and nothing auto-starts. The point of a
+    /// predefined session is that finishing it is an event, and continuing is a decision
+    /// the user makes again rather than something that happens to them.
+    /// </remarks>
+    public void StartPredefined(TimerConfig config, TimeSpan duration)
+    {
+        ArgumentNullException.ThrowIfNull(config);
+
+        var single = config.Clone();
+        single.StudyDuration = duration;
+        BeginRun(single, TimerMode.Study, standalone: true);
+    }
 
     private void BeginRun(TimerConfig config, TimerMode mode, bool standalone)
     {
@@ -118,7 +135,7 @@ public sealed class TimerEngine : ITimerEngine, IDisposable
             _mode = mode;
             _currentSession = 1;
             _isPaused = false;
-            _standaloneBreak = standalone;
+            _singleSession = standalone;
             _lastRaised = TimeSpan.MinValue;
             BeginSegment(DurationFor(mode));
             EnsureTimer(active: true);
@@ -150,7 +167,7 @@ public sealed class TimerEngine : ITimerEngine, IDisposable
             _mode = state.Mode;
             _currentSession = Math.Max(1, state.CurrentSession);
             _isPaused = true;
-            _standaloneBreak = false;
+            _singleSession = false;
             _lastRaised = TimeSpan.MinValue;
 
             _segmentRemaining = state.RemainingTime > TimeSpan.Zero
@@ -398,14 +415,20 @@ public sealed class TimerEngine : ITimerEngine, IDisposable
 
         var next = completed == TimerMode.Study ? TimerMode.Break : TimerMode.Study;
 
+        // A one-shot run is over the moment its single session finishes, whichever mode
+        // that was — there is nothing to roll into.
+        if (_singleSession)
+        {
+            GoIdle();
+            return new SessionEndedEventArgs(
+                completed, TimerMode.Idle, Snapshot(),
+                outcome, startedAt, planned, actual, number);
+        }
+
         if (next == TimerMode.Study)
         {
-            // A break that was started on its own has nothing to return to, and a finite
-            // run stops once the configured number of study sessions is done (FR-007).
-            var runFinished = _standaloneBreak
-                || (!_config.InfiniteMode && _currentSession >= _config.SessionCount);
-
-            if (runFinished)
+            // A finite run stops once the configured number of focus sessions is done.
+            if (!_config.InfiniteMode && _currentSession >= _config.SessionCount)
             {
                 GoIdle();
                 return new SessionEndedEventArgs(
@@ -455,7 +478,7 @@ public sealed class TimerEngine : ITimerEngine, IDisposable
     {
         _mode = TimerMode.Idle;
         _isPaused = false;
-        _standaloneBreak = false;
+        _singleSession = false;
         _currentSession = 1;
         _segmentRemaining = TimeSpan.Zero;
         _lastRaised = TimeSpan.MinValue;

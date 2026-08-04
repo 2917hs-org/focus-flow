@@ -58,6 +58,7 @@ public sealed class TrayService : ITrayService, IDisposable
     private readonly NativeMenuItem _statusItem;
     private readonly NativeMenuItem _startItem;
     private readonly NativeMenuItem _breakItem;
+    private readonly NativeMenuItem _predefinedItem;
     private readonly NativeMenuItem _pauseItem;
     private readonly NativeMenuItem _resumeItem;
     private readonly NativeMenuItem _skipItem;
@@ -77,6 +78,19 @@ public sealed class TrayService : ITrayService, IDisposable
         _resetItem = Action("Reset", () => ResetRequested);
         _stopItem = Action("Stop", () => StopRequested);
 
+        // A submenu rather than two more top-level rows: these are variants of one action,
+        // and the menu already carries seven.
+        _predefinedItem = new NativeMenuItem("Focus Session")
+        {
+            Menu = new NativeMenu
+            {
+                PredefinedAction("15 minutes", 15),
+                PredefinedAction("30 minutes", 30),
+                PredefinedAction("45 minutes", 45),
+                PredefinedAction("60 minutes", 60)
+            }
+        };
+
         var open = new NativeMenuItem("Open Main Window");
         open.Click += (_, _) => OpenRequested?.Invoke(this, EventArgs.Empty);
 
@@ -95,6 +109,7 @@ public sealed class TrayService : ITrayService, IDisposable
                 _statusItem,
                 new NativeMenuItemSeparator(),
                 _startItem,
+                _predefinedItem,
                 _breakItem,
                 _pauseItem,
                 _resumeItem,
@@ -118,6 +133,9 @@ public sealed class TrayService : ITrayService, IDisposable
 
     public event EventHandler? StartRequested;
     public event EventHandler? StartBreakRequested;
+
+    /// <summary>A fixed-length focus session was chosen; the argument is its length in minutes.</summary>
+    public event EventHandler<int>? PredefinedRequested;
     public event EventHandler? PauseRequested;
     public event EventHandler? ResumeRequested;
     public event EventHandler? SkipRequested;
@@ -139,6 +157,7 @@ public sealed class TrayService : ITrayService, IDisposable
         // Hidden rather than greyed: a Pause entry that is permanently unavailable during
         // a study session would dangle the very option the design removes.
         _startItem.IsVisible = status.CanStart;
+        _predefinedItem.IsVisible = status.CanStart;
         _breakItem.IsVisible = status.CanStartBreak;
         _pauseItem.IsVisible = status.CanPause;
         _resumeItem.IsVisible = status.CanResume;
@@ -186,6 +205,13 @@ public sealed class TrayService : ITrayService, IDisposable
         // Released only after the replacement is in place — the tray still holds a
         // reference to the old bitmap until then.
         previous?.Dispose();
+    }
+
+    private NativeMenuItem PredefinedAction(string header, int minutes)
+    {
+        var item = new NativeMenuItem(header);
+        item.Click += (_, _) => PredefinedRequested?.Invoke(this, minutes);
+        return item;
     }
 
     /// <summary>
