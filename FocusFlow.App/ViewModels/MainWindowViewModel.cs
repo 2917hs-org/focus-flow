@@ -336,7 +336,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private bool CanReset() => IsSessionActive;
     private bool CanSkip() => IsSessionActive;
 
-    private bool IsSessionActive { get; set; }
+    /// <summary>
+    /// Drives the mini timer widget's visibility: shown while a session runs, hidden the
+    /// moment it goes idle. Observable so App can react without polling.
+    /// </summary>
+    [ObservableProperty] private bool _isSessionActive;
+
     private bool IsPaused { get; set; }
     private TimerMode Mode { get; set; } = TimerMode.Idle;
 
@@ -504,7 +509,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
         _trayService.UpdateStatus(new TrayStatus(
             state.Mode == TimerMode.Idle ? "Idle" : CurrentTime,
-            state.Mode == TimerMode.Idle ? null : FormatShort(state.RemainingTime),
+            state.Mode == TimerMode.Idle ? null : CurrentTime,
             StatusText,
             CanStart(),
             CanStart(),
@@ -521,27 +526,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         StopCommand.NotifyCanExecuteChanged();
         ResetCommand.NotifyCanExecuteChanged();
         SkipCommand.NotifyCanExecuteChanged();
-    }
-
-    /// <summary>
-    /// Abbreviated form for the menu bar icon: whole minutes, dropping to seconds for the
-    /// final minute. Kept to two or three characters so the digits can be drawn large
-    /// enough to read at a glance.
-    /// </summary>
-    /// <remarks>
-    /// Minutes round up, so 24:35 reads "25m" — a countdown that says 24 while 24 and a
-    /// half remain is understating what is left.
-    /// </remarks>
-    private static string FormatShort(TimeSpan value)
-    {
-        if (value < TimeSpan.Zero)
-        {
-            value = TimeSpan.Zero;
-        }
-
-        return value < TimeSpan.FromMinutes(1)
-            ? $"{value.Seconds}s"
-            : $"{(int)Math.Ceiling(value.TotalMinutes)}m";
     }
 
     /// <summary>

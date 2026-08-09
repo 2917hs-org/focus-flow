@@ -23,8 +23,9 @@ namespace FocusFlow.App.Services;
 /// </remarks>
 public static class TrayIconRenderer
 {
-    // Two or three characters, so this can be far larger than an mm:ss string allowed.
-    private const double FontSize = 19;
+    // Sized for a five-to-six character mm:ss string; monospace keeps it from ever
+    // reflowing the rest of the menu bar as the digits change.
+    private const double FontSize = 15;
     private const double PaddingX = 2;
 
     /// <summary>

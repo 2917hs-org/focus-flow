@@ -10,10 +10,9 @@ namespace FocusFlow.Application.Interfaces;
 /// so the menu can never disagree with the window about whether, say, Pause applies.
 /// </para>
 /// <para>
-/// <c>IconLabel</c> is the abbreviated form drawn into the menu bar icon — minutes rather
-/// than mm:ss, because the shorter the string the larger the glyphs can be in the space a
-/// menu bar allows. Null when nothing is running. The full time stays in <c>Time</c> for
-/// the tooltip and the menu readout.
+/// <c>IconLabel</c> is drawn straight into the menu bar icon, ticking every second like
+/// the macOS Stopwatch's own menu bar readout — the same mm:ss text as <c>Time</c>, which
+/// also carries the tooltip and the menu readout. Null when nothing is running.
 /// </para>
 /// </remarks>
 public sealed record TrayStatus(

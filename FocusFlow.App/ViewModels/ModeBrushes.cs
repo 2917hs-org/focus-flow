@@ -12,12 +12,11 @@ namespace FocusFlow.App.ViewModels;
 /// </remarks>
 internal static class ModeBrushes
 {
-    /// <summary>Indigo, matching the app icon.</summary>
-    public static readonly IBrush Study = Freeze(Color.FromRgb(0x4F, 0x46, 0xE5));
+    public static readonly IBrush Study = Freeze(Color.FromRgb(0x59, 0xB2, 0x92));
 
-    public static readonly IBrush Break = Freeze(Color.FromRgb(0x2E, 0x9E, 0x5B));
+    public static readonly IBrush Break = Freeze(Color.FromRgb(0xFF, 0xC9, 0x4D));
 
-    public static readonly IBrush Paused = Freeze(Color.FromRgb(0xC7, 0x77, 0x00));
+    public static readonly IBrush Paused = Freeze(Color.FromRgb(0xFA, 0x67, 0x81));
 
     /// <summary>Deliberately grey — nothing is running, so nothing should draw the eye.</summary>
     public static readonly IBrush Idle = Freeze(Color.FromRgb(0x80, 0x80, 0x80));

@@ -25,6 +25,7 @@ public partial class App : Avalonia.Application
 {
     private ServiceProvider? _provider;
     private MainWindow? _mainWindow;
+    private MiniTimerWindow? _miniTimerWindow;
     private IWindowPlacementService? _placement;
 
     /// <summary>Set by Program when another launch was detected and refused.</summary>
@@ -82,6 +83,12 @@ public partial class App : Avalonia.Application
 
             desktop.MainWindow = window;
 
+            // A standalone widget rather than part of MainWindow: it has to stay on top
+            // and visible even while MainWindow is hidden to the tray, which is the
+            // normal state once a session is running.
+            _miniTimerWindow = new MiniTimerWindow { DataContext = viewModel };
+            WireMiniTimer(viewModel);
+
             WireTray(viewModel);
 
             viewModel.AlertRequested += (sender, e) => ShowAlert(e.Heading, e.Body);
@@ -107,6 +114,50 @@ public partial class App : Avalonia.Application
         }
 
         base.OnFrameworkInitializationCompleted();
+    }
+
+    /// <summary>
+    /// Ties the widget's visibility to the session rather than to any window state: it
+    /// should float above the desktop for the whole run, including while MainWindow sits
+    /// hidden in the tray, and disappear the instant the session goes idle.
+    /// </summary>
+    private void WireMiniTimer(MainWindowViewModel viewModel)
+    {
+        if (_miniTimerWindow is null)
+        {
+            return;
+        }
+
+        viewModel.PropertyChanged += (sender, e) =>
+        {
+            if (e.PropertyName != nameof(MainWindowViewModel.IsSessionActive))
+            {
+                return;
+            }
+
+            Dispatcher.UIThread.Post(() => SetMiniTimerVisible(viewModel.IsSessionActive));
+        };
+
+        // FR-013 may have already restored an interrupted run by this point, so reflect
+        // that immediately rather than waiting for the next tick.
+        SetMiniTimerVisible(viewModel.IsSessionActive);
+    }
+
+    private void SetMiniTimerVisible(bool visible)
+    {
+        if (_miniTimerWindow is null)
+        {
+            return;
+        }
+
+        if (visible)
+        {
+            _miniTimerWindow.Show();
+        }
+        else
+        {
+            _miniTimerWindow.Hide();
+        }
     }
 
     private void WireTray(MainWindowViewModel viewModel)

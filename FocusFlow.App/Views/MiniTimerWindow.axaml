@@ -1,0 +1,108 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:viewModels="using:FocusFlow.App.ViewModels"
+        x:Class="FocusFlow.App.Views.MiniTimerWindow"
+        x:DataType="viewModels:MainWindowViewModel"
+        Title="FocusFlow"
+        WindowDecorations="None"
+        Background="Transparent"
+        TransparencyLevelHint="Transparent"
+        CanResize="False"
+        ShowInTaskbar="False"
+        Topmost="True"
+        SizeToContent="WidthAndHeight"
+        WindowStartupLocation="Manual">
+
+    <Window.Styles>
+        <!-- Local to the widget rather than the shared success/warning/danger classes in
+             App.axaml — those still carry MainWindow's palette, and this widget has its
+             own. Fluent restyles the inner ContentPresenter on hover/press, so each state
+             needs its own setter or the theme colour would show through on interaction. -->
+        <Style Selector="Button.mini-resume">
+            <Setter Property="Background" Value="#59B292" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+        </Style>
+        <Style Selector="Button.mini-resume:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#68C1A1" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+        <Style Selector="Button.mini-resume:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#4AA383" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+
+        <Style Selector="Button.mini-pause">
+            <Setter Property="Background" Value="#FFC94D" />
+            <Setter Property="Foreground" Value="#402D00" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+        </Style>
+        <Style Selector="Button.mini-pause:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#FFD85C" />
+            <Setter Property="Foreground" Value="#402D00" />
+        </Style>
+        <Style Selector="Button.mini-pause:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#F0BA3E" />
+            <Setter Property="Foreground" Value="#402D00" />
+        </Style>
+
+        <Style Selector="Button.mini-stop">
+            <Setter Property="Background" Value="#FA6781" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+        </Style>
+        <Style Selector="Button.mini-stop:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#FF7690" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+        <Style Selector="Button.mini-stop:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#EB5872" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+    </Window.Styles>
+
+    <!-- Its own rounded surface rather than the window chrome: WindowDecorations="None"
+         gives a transparent, borderless window, so the widget has to paint its own
+         background to read as a floating card instead of stray controls on the desktop. -->
+    <Border Background="#FAE7CB"
+            CornerRadius="12"
+            Padding="12,9"
+            BoxShadow="0 6 20 0 #40000000">
+        <StackPanel Width="150" Spacing="7">
+
+            <!-- Only this area drags the window — the transport row below needs its
+                 clicks to reach the buttons, not to start a drag. -->
+            <StackPanel x:Name="DragHandle" Spacing="1" Background="Transparent"
+                        PointerPressed="OnDragHandlePointerPressed">
+                <TextBlock Text="{Binding CurrentTime}"
+                           FontSize="22"
+                           FontWeight="SemiBold"
+                           FontFamily="Menlo, Consolas, monospace"
+                           Foreground="{Binding ModeBrush}"
+                           HorizontalAlignment="Center" />
+                <TextBlock Text="{Binding StatusText}"
+                           FontSize="10"
+                           Foreground="Black"
+                           Opacity="0.7"
+                           HorizontalAlignment="Center"
+                           TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+
+            <ProgressBar Value="{Binding SessionProgress}"
+                         Minimum="0" Maximum="1"
+                         Height="3"
+                         Foreground="{Binding ModeBrush}" />
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="6">
+                <Button Content="Pause" Classes="mini-pause" Padding="8,3" FontSize="11"
+                        Command="{Binding PauseCommand}"
+                        IsVisible="{Binding CanPauseNow}" />
+                <Button Content="Resume" Classes="mini-resume" Padding="8,3" FontSize="11"
+                        Command="{Binding ResumeCommand}"
+                        IsVisible="{Binding IsPausedNow}" />
+                <Button Content="Stop" Classes="mini-stop" Padding="8,3" FontSize="11"
+                        Command="{Binding StopCommand}" />
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</Window>
