@@ -19,9 +19,37 @@
             <Setter Property="Padding" Value="9,5" />
             <Setter Property="FontSize" Value="12" />
         </Style>
+
+        <!-- Every settings group below is one of these: a Surface-coloured card rather
+             than a bare heading + a Separator rule. A flat, continuous stream of every
+             setting at the same visual weight made the whole pane read as one wall of
+             controls; a card per group turns that into something scannable, and gives the
+             new palette's Surface/Border roles an actual job now that they aren't only
+             backing the mini timer widget. -->
+        <Style Selector="Border.card">
+            <Setter Property="Background" Value="{DynamicResource PaletteSurface}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PaletteBorder}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="Padding" Value="16" />
+        </Style>
+
+        <!-- Each card's "More … options" Expander is the progressive-disclosure half of
+             the same idea: duration/alarm/volume are what get touched every session, so
+             they stay visible; auto-start, infinite mode, session count and the reminder
+             lead time are set once and rarely revisited, so they start collapsed instead
+             of competing for attention with what's actually used often. Left at Fluent's
+             own default template rather than reaching into its internal parts — the
+             corner-radius and Slider-height fixes elsewhere in this session both came
+             from guessing at Fluent's internals and needing a second pass to get right,
+             and a plain Margin here gets the same "give it some breathing room" result
+             without that risk. -->
+        <Style Selector="Expander">
+            <Setter Property="Margin" Value="0,4,0,0" />
+        </Style>
     </Window.Styles>
 
-    <StackPanel x:Name="Root" Margin="24" Spacing="12">
+    <StackPanel x:Name="Root" Margin="24" Spacing="16">
 
         <!-- Countdown -->
         <StackPanel Spacing="4">
@@ -54,130 +82,149 @@
             <Button Content="Stop" Classes="danger" Command="{Binding StopCommand}" />
         </StackPanel>
 
-        <Separator />
+        <!-- Sessions card -->
+        <Border Classes="card">
+            <StackPanel Spacing="12">
+                <TextBlock Text="Sessions" FontWeight="SemiBold" />
 
-        <!-- Settings; every change is saved automatically -->
-        <StackPanel Spacing="12">
-            <TextBlock Text="Sessions" FontWeight="SemiBold" />
-
-            <!-- Paired on one row: two full-width spinners stacked took far more
-                 vertical space than two numbers warrant. Editable combo boxes rather than
-                 NumericUpDown: a dropdown of common lengths for the one-click case, but
-                 still a plain text box underneath for any other value up to the cap. -->
-            <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
-                <StackPanel Grid.Column="0" Spacing="4">
-                    <TextBlock Text="Focus (min, up to 120)" />
-                    <ComboBox IsEditable="True"
-                              ItemsSource="{Binding FocusDurationPresets}"
-                              Text="{Binding StudyDuration, Mode=TwoWay}"
-                              HorizontalAlignment="Stretch" />
-                </StackPanel>
-                <StackPanel Grid.Column="1" Spacing="4">
-                    <TextBlock Text="Break (min, up to 60)" />
-                    <ComboBox IsEditable="True"
-                              ItemsSource="{Binding BreakDurationPresets}"
-                              Text="{Binding BreakDuration, Mode=TwoWay}"
-                              HorizontalAlignment="Stretch" />
-                </StackPanel>
-            </Grid>
-
-            <Grid ColumnDefinitions="*,*" ColumnSpacing="12" RowDefinitions="Auto,Auto"
-                  RowSpacing="6">
-                <CheckBox Grid.Row="0" Grid.Column="0" Content="Auto-start breaks"
-                          IsChecked="{Binding AutoStartBreak, Mode=TwoWay}" />
-                <CheckBox Grid.Row="0" Grid.Column="1" Content="Auto-start focus"
-                          IsChecked="{Binding AutoStartStudy, Mode=TwoWay}" />
-                <CheckBox Grid.Row="1" Grid.Column="0" Content="Infinite mode"
-                          IsChecked="{Binding InfiniteMode, Mode=TwoWay}" />
-                <CheckBox Grid.Row="1" Grid.Column="1" Content="Remind before end"
-                          IsChecked="{Binding ReminderEnabled, Mode=TwoWay}" />
-            </Grid>
-
-            <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
-                <StackPanel Grid.Column="0" Spacing="4"
-                            IsEnabled="{Binding IsSessionCountEnabled}">
-                    <TextBlock Text="Sessions per run" />
-                    <NumericUpDown Value="{Binding SessionCount, Mode=TwoWay}"
-                                   Minimum="1" Maximum="10" Increment="1" FormatString="0"
-                                   HorizontalAlignment="Stretch" />
-                </StackPanel>
-                <StackPanel Grid.Column="1" Spacing="4"
-                            IsEnabled="{Binding ReminderEnabled}">
-                    <TextBlock Text="Remind before (min)" />
-                    <NumericUpDown Value="{Binding ReminderLeadMinutes, Mode=TwoWay}"
-                                   Minimum="1" Maximum="10" Increment="1" FormatString="0"
-                                   HorizontalAlignment="Stretch" />
-                </StackPanel>
-            </Grid>
-
-            <Separator />
-            <TextBlock Text="Sound" FontWeight="SemiBold" />
-
-            <StackPanel Spacing="4">
-                <TextBlock Text="Alarm sound" />
-                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
-                    <ComboBox Grid.Column="0"
-                              HorizontalAlignment="Stretch"
-                              ItemsSource="{Binding AvailableSounds}"
-                              SelectedItem="{Binding SelectedSound, Mode=TwoWay}">
-                        <ComboBox.ItemTemplate>
-                            <DataTemplate>
-                                <TextBlock Text="{Binding Name}" />
-                            </DataTemplate>
-                        </ComboBox.ItemTemplate>
-                    </ComboBox>
-                    <Button Grid.Column="1" Content="Browse…" Command="{Binding BrowseAlarmCommand}" />
-                    <Button Grid.Column="2" Content="Test" Command="{Binding TestSoundCommand}" />
+                <!-- Paired on one row: two full-width spinners stacked took far more
+                     vertical space than two numbers warrant. Editable combo boxes rather
+                     than NumericUpDown: a dropdown of common lengths for the one-click
+                     case, but still a plain text box underneath for any other value up to
+                     the cap. -->
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+                    <StackPanel Grid.Column="0" Spacing="4">
+                        <TextBlock Text="Focus (min, up to 120)" />
+                        <ComboBox IsEditable="True"
+                                  ItemsSource="{Binding FocusDurationPresets}"
+                                  Text="{Binding StudyDuration, Mode=TwoWay}"
+                                  HorizontalAlignment="Stretch" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Spacing="4">
+                        <TextBlock Text="Break (min, up to 60)" />
+                        <ComboBox IsEditable="True"
+                                  ItemsSource="{Binding BreakDurationPresets}"
+                                  Text="{Binding BreakDuration, Mode=TwoWay}"
+                                  HorizontalAlignment="Stretch" />
+                    </StackPanel>
                 </Grid>
+
+                <Expander Header="More session options">
+                    <StackPanel Spacing="12">
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="12" RowDefinitions="Auto,Auto"
+                              RowSpacing="6">
+                            <CheckBox Grid.Row="0" Grid.Column="0" Content="Auto-start breaks"
+                                      IsChecked="{Binding AutoStartBreak, Mode=TwoWay}" />
+                            <CheckBox Grid.Row="0" Grid.Column="1" Content="Auto-start focus"
+                                      IsChecked="{Binding AutoStartStudy, Mode=TwoWay}" />
+                            <CheckBox Grid.Row="1" Grid.Column="0" Content="Infinite mode"
+                                      IsChecked="{Binding InfiniteMode, Mode=TwoWay}" />
+                            <CheckBox Grid.Row="1" Grid.Column="1" Content="Remind before end"
+                                      IsChecked="{Binding ReminderEnabled, Mode=TwoWay}" />
+                        </Grid>
+
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+                            <StackPanel Grid.Column="0" Spacing="4"
+                                        IsEnabled="{Binding IsSessionCountEnabled}">
+                                <TextBlock Text="Sessions per run" />
+                                <NumericUpDown Value="{Binding SessionCount, Mode=TwoWay}"
+                                               Minimum="1" Maximum="10" Increment="1" FormatString="0"
+                                               HorizontalAlignment="Stretch" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Spacing="4"
+                                        IsEnabled="{Binding ReminderEnabled}">
+                                <TextBlock Text="Remind before (min)" />
+                                <NumericUpDown Value="{Binding ReminderLeadMinutes, Mode=TwoWay}"
+                                               Minimum="1" Maximum="10" Increment="1" FormatString="0"
+                                               HorizontalAlignment="Stretch" />
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Expander>
             </StackPanel>
+        </Border>
 
-            <StackPanel Spacing="4">
-                <TextBlock Text="{Binding AlarmVolume, StringFormat='Volume: {0}%'}" />
-                <!-- Fluent reserves ~50px of vertical space for a horizontal Slider
-                     regardless of Padding/MinHeight, most of it empty padding around the
-                     thumb rather than anything visible. Constraining Height to crop that
-                     padding was tried first and reverted: a headless Avalonia probe showed
-                     the thumb's own *layout* bounds fitting inside a shorter box, but the
-                     probe measures logical layout, not render-time clipping — in the real
-                     app the thumb's circle was visibly cut off by exactly that Height
-                     constraint. A negative Margin is a different, safer mechanism: it
-                     repositions the whole already-correctly-rendered control rather than
-                     resizing it, so nothing about the Slider's own internal template
-                     rendering is touched, which is what actually caused the clipping. -->
-                <Slider Value="{Binding AlarmVolume, Mode=TwoWay}"
-                        Minimum="0" Maximum="100" TickFrequency="10" IsSnapToTickEnabled="True"
-                        Margin="0,-14,0,-14" />
-            </StackPanel>
+        <!-- Sound card -->
+        <Border Classes="card">
+            <StackPanel Spacing="12">
+                <TextBlock Text="Sound" FontWeight="SemiBold" />
 
-            <CheckBox Content="Play music when a break ends"
-                      IsChecked="{Binding PlayMusicAfterBreak, Mode=TwoWay}" />
-            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
-                <TextBox Grid.Column="0" Text="{Binding MusicPath}" PlaceholderText="No music selected"
-                         IsReadOnly="True" />
-                <Button Grid.Column="1" Content="Browse…" Command="{Binding BrowseMusicCommand}" />
-                <Button Grid.Column="2" Content="Stop" Command="{Binding StopAudioCommand}" />
-            </Grid>
-
-            <Separator />
-            <TextBlock Text="Application" FontWeight="SemiBold" />
-
-            <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
-                <StackPanel Grid.Column="0" Spacing="4">
-                    <TextBlock Text="Theme" />
-                    <ComboBox HorizontalAlignment="Stretch"
-                              ItemsSource="{Binding AvailableThemes}"
-                              SelectedItem="{Binding Theme, Mode=TwoWay}" />
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Alarm sound" />
+                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                        <ComboBox Grid.Column="0"
+                                  HorizontalAlignment="Stretch"
+                                  ItemsSource="{Binding AvailableSounds}"
+                                  SelectedItem="{Binding SelectedSound, Mode=TwoWay}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Name}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <Button Grid.Column="1" Content="Browse…" Command="{Binding BrowseAlarmCommand}" />
+                        <Button Grid.Column="2" Content="Test" Command="{Binding TestSoundCommand}" />
+                    </Grid>
                 </StackPanel>
-                <CheckBox Grid.Column="1" Content="Launch at login"
-                          VerticalAlignment="Bottom"
-                          IsChecked="{Binding LaunchOnStartup, Mode=TwoWay}"
-                          IsEnabled="{Binding IsStartupSupported}" />
-            </Grid>
-            <TextBlock Text="{Binding StartupWarning}"
-                       IsVisible="{Binding StartupWarning, Converter={x:Static ObjectConverters.IsNotNull}}"
-                       Foreground="{DynamicResource PaletteSecondary}"
-                       FontSize="11" TextWrapping="Wrap" />
-        </StackPanel>
+
+                <StackPanel Spacing="4">
+                    <TextBlock Text="{Binding AlarmVolume, StringFormat='Volume: {0}%'}" />
+                    <!-- Fluent reserves ~50px of vertical space for a horizontal Slider
+                         regardless of Padding/MinHeight, most of it empty padding around
+                         the thumb rather than anything visible. Constraining Height to
+                         crop that padding was tried first and reverted: a headless
+                         Avalonia probe showed the thumb's own *layout* bounds fitting
+                         inside a shorter box, but the probe measures logical layout, not
+                         render-time clipping — in the real app the thumb's circle was
+                         visibly cut off by exactly that Height constraint. A negative
+                         Margin is a different, safer mechanism: it repositions the whole
+                         already-correctly-rendered control rather than resizing it, so
+                         nothing about the Slider's own internal template rendering is
+                         touched, which is what actually caused the clipping. -->
+                    <Slider Value="{Binding AlarmVolume, Mode=TwoWay}"
+                            Minimum="0" Maximum="100" TickFrequency="10" IsSnapToTickEnabled="True"
+                            Margin="0,-14,0,-14" />
+                </StackPanel>
+
+                <Expander Header="More sound options">
+                    <StackPanel Spacing="12">
+                        <CheckBox Content="Play music when a break ends"
+                                  IsChecked="{Binding PlayMusicAfterBreak, Mode=TwoWay}" />
+                        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
+                            <TextBox Grid.Column="0" Text="{Binding MusicPath}"
+                                     PlaceholderText="No music selected" IsReadOnly="True" />
+                            <Button Grid.Column="1" Content="Browse…" Command="{Binding BrowseMusicCommand}" />
+                            <Button Grid.Column="2" Content="Stop" Command="{Binding StopAudioCommand}" />
+                        </Grid>
+                    </StackPanel>
+                </Expander>
+            </StackPanel>
+        </Border>
+
+        <!-- Application card. No "More options" Expander here — Theme and Launch at
+             login are the whole card, so there's nothing left to collapse. -->
+        <Border Classes="card">
+            <StackPanel Spacing="12">
+                <TextBlock Text="Application" FontWeight="SemiBold" />
+
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+                    <StackPanel Grid.Column="0" Spacing="4">
+                        <TextBlock Text="Theme" />
+                        <ComboBox HorizontalAlignment="Stretch"
+                                  ItemsSource="{Binding AvailableThemes}"
+                                  SelectedItem="{Binding Theme, Mode=TwoWay}" />
+                    </StackPanel>
+                    <CheckBox Grid.Column="1" Content="Launch at login"
+                              VerticalAlignment="Bottom"
+                              IsChecked="{Binding LaunchOnStartup, Mode=TwoWay}"
+                              IsEnabled="{Binding IsStartupSupported}" />
+                </Grid>
+                <TextBlock Text="{Binding StartupWarning}"
+                           IsVisible="{Binding StartupWarning, Converter={x:Static ObjectConverters.IsNotNull}}"
+                           Foreground="{DynamicResource PaletteSecondary}"
+                           FontSize="11" TextWrapping="Wrap" />
+            </StackPanel>
+        </Border>
 
         <TextBlock Text="Closing this window keeps FocusFlow running in the tray."
                    Foreground="{DynamicResource PaletteSecondary}"
