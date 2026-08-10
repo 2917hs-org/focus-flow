@@ -57,6 +57,18 @@ public class ConfigPersistenceTests : IDisposable
     }
 
     [Fact]
+    public void SaveThenLoad_RoundTripsBlockedAppIds()
+    {
+        var storage = new JsonConfigStorage(ConfigPath);
+        var saved = new TimerConfig { BlockedAppIds = ["com.apple.Safari", "com.apple.mail"] };
+
+        storage.Save(saved);
+        var loaded = storage.Load();
+
+        Assert.Equal(saved.BlockedAppIds, loaded.BlockedAppIds);
+    }
+
+    [Fact]
     public void Load_OnAMissingFile_ReturnsDefaults()
     {
         var loaded = new JsonConfigStorage(ConfigPath).Load();
@@ -105,6 +117,29 @@ public class ConfigPersistenceTests : IDisposable
 
         // A zero duration would otherwise end sessions instantly, in a loop.
         Assert.True(settings.Current.StudyDuration >= TimerConfig.MinDuration);
+    }
+
+    [Fact]
+    public void SettingsService_NormalizesBlockedAppIds_TrimsDedupesAndDropsBlanks()
+    {
+        var clock = new FakeTimeProvider();
+        using var settings = new SettingsService(new JsonConfigStorage(ConfigPath), clock);
+
+        settings.Update(c => c.BlockedAppIds =
+            [" com.apple.Safari ", "com.apple.safari", "", "   ", "com.apple.Mail"]);
+
+        Assert.Equal(["com.apple.Safari", "com.apple.Mail"], settings.Current.BlockedAppIds);
+    }
+
+    [Fact]
+    public void TimerConfig_Clone_CopiesBlockedAppIdsAsAnIndependentList()
+    {
+        var original = new TimerConfig { BlockedAppIds = ["com.apple.Safari"] };
+
+        var clone = original.Clone();
+        clone.BlockedAppIds.Add("com.apple.mail");
+
+        Assert.Single(original.BlockedAppIds);
     }
 
     [Fact]

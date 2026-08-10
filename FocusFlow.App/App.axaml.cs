@@ -29,6 +29,7 @@ public partial class App : Avalonia.Application
     private MainWindow? _mainWindow;
     private MiniTimerWindow? _miniTimerWindow;
     private HistoryWindow? _historyWindow;
+    private BlockedAppsWindow? _blockedAppsWindow;
     private IWindowPlacementService? _placement;
 
     /// <summary>Set by Program when another launch was detected and refused.</summary>
@@ -97,6 +98,10 @@ public partial class App : Avalonia.Application
         // Begin logging finished sessions to the local history file.
         _provider.GetRequiredService<SessionHistoryService>().StartTracking();
 
+        // Begin enforcing the blocked-apps list once a session is running. A no-op when
+        // unsupported (Windows, or macOS without Accessibility access granted yet).
+        _provider.GetRequiredService<AppBlockingService>().StartTracking();
+
         _placement = _provider.GetRequiredService<IWindowPlacementService>();
 
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
@@ -115,6 +120,11 @@ public partial class App : Avalonia.Application
                 e.Cancel = true;
                 window.Hide();
             };
+
+            // Accessibility permission can be granted in System Settings while the app is
+            // running, with no notification back to us — re-check whenever the window
+            // regains focus, which covers the "went to grant it, came back" path.
+            window.Activated += (sender, e) => viewModel.RefreshAppBlockingSupport();
 
             // Minimising goes to the tray too, not just closing — the app should never sit
             // in the dock/taskbar as a second copy of the tray icon.
@@ -140,6 +150,7 @@ public partial class App : Avalonia.Application
 
             viewModel.AlertRequested += (sender, e) => ShowAlert(e.Heading, e.Body);
             viewModel.ShowHistoryRequested += (sender, e) => Dispatcher.UIThread.Post(ShowHistory);
+            viewModel.ShowBlockedAppsRequested += (sender, e) => Dispatcher.UIThread.Post(ShowBlockedApps);
 
             // Storage and permission failures raised from the application layer.
             _provider.GetRequiredService<UserAlerts>().AlertRaised +=
@@ -239,6 +250,21 @@ public partial class App : Avalonia.Application
         });
 
         tray.ShowHistoryRequested += (sender, e) => Dispatcher.UIThread.Post(ShowHistory);
+
+        // Goes through BlockedAppsViewModel (not straight to ISettingsService) so that if
+        // the Manage Blocked Apps window is open, it reflects the change immediately —
+        // same singleton instance either way.
+        tray.BlockFrontmostAppRequested += (sender, e) => Dispatcher.UIThread.Post(() =>
+        {
+            var blocked = _provider!.GetRequiredService<BlockedAppsViewModel>().BlockFrontmostApp();
+            var notifications = _provider.GetRequiredService<INotificationService>();
+
+            notifications.ShowNotification(
+                blocked is not null ? "App blocked" : "Nothing to block",
+                blocked is not null
+                    ? $"{blocked.DisplayName} will be hidden during focus sessions."
+                    : "Couldn't tell which app was frontmost, or it's already blocked.");
+        });
     }
 
     /// <summary>
@@ -276,6 +302,33 @@ public partial class App : Avalonia.Application
     }
 
     /// <summary>
+    /// Created lazily and reused, same reasoning as <see cref="ShowHistory"/>: an
+    /// occasionally-opened management window, not something needed before the user has
+    /// ever asked for it, and reused so BlockedAppsViewModel's picker state (search text,
+    /// which checkboxes are ticked) survives between visits in the same run.
+    /// </summary>
+    private void ShowBlockedApps()
+    {
+        if (_blockedAppsWindow is null)
+        {
+            var window = new BlockedAppsWindow
+            {
+                DataContext = _provider!.GetRequiredService<BlockedAppsViewModel>()
+            };
+
+            window.Closing += (sender, e) =>
+            {
+                e.Cancel = true;
+                window.Hide();
+            };
+
+            _blockedAppsWindow = window;
+        }
+
+        _placement?.ShowOnActiveScreen(_blockedAppsWindow);
+    }
+
+    /// <summary>
     /// Menu clicks arrive on the platform's own thread; commands touch bound state, so
     /// they have to be executed on the dispatcher.
     /// </summary>
@@ -308,6 +361,12 @@ public partial class App : Avalonia.Application
         services.AddSingleton<SessionPersistenceService>();
         services.AddSingleton<SessionHistoryService>();
 
+        // Registered twice for the same reason as UserAlerts below: AppBlockingService
+        // needs the concrete type to call StartTracking(), the Settings UI depends on
+        // the interface.
+        services.AddSingleton<AppBlockingService>();
+        services.AddSingleton<IAppBlockingService>(sp => sp.GetRequiredService<AppBlockingService>());
+
         // Infrastructure
         services.AddSingleton<IConfigStorage>(_ =>
             new JsonConfigStorage(JsonConfigStorage.DefaultPath()));
@@ -334,16 +393,19 @@ public partial class App : Avalonia.Application
         services.AddSingleton<IStartupService, WindowsStartupService>();
         services.AddSingleton<IPointerLocator, WindowsPointerLocator>();
         services.AddSingleton<IMenuBarCountdown, NoopMenuBarCountdown>();
+        services.AddSingleton<IAppBlockingMonitor, NoopAppBlockingMonitor>();
 #else
         services.AddSingleton<INotificationService, MacNotificationService>();
         services.AddSingleton<IAudioPlayer, MacAudioPlayer>();
         services.AddSingleton<IStartupService, MacStartupService>();
         services.AddSingleton<IPointerLocator, MacPointerLocator>();
         services.AddSingleton<IMenuBarCountdown, NativeMenuBarCountdown>();
+        services.AddSingleton<IAppBlockingMonitor, MacAppBlockingMonitor>();
 #endif
 
         services.AddSingleton<MainWindowViewModel>();
         services.AddSingleton<HistoryViewModel>();
+        services.AddSingleton<BlockedAppsViewModel>();
 
         return services.BuildServiceProvider();
     }

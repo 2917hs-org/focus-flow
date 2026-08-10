@@ -42,6 +42,15 @@
             <Setter Property="VerticalContentAlignment" Value="Center" />
         </Style>
 
+        <!-- Belt-and-braces rather than relying on Fluent's own default: every button's
+             content centred on all four sides, so a short label ("Add") and a longer one
+             ("Unblock all") both sit visually centred in whatever width Stretch gives the
+             button, instead of drifting to one edge. -->
+        <Style Selector="Button">
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+
         <!-- Default text colour is set per-Window (Foreground on the root element), not
              here as a blanket "Selector=TextBlock" rule: Foreground is an inherited
              property, so a Window-level value already cascades to every plain TextBlock
@@ -109,6 +118,24 @@
         <Style Selector="Button.info:pressed /template/ ContentPresenter#PART_ContentPresenter">
             <Setter Property="Background" Value="{DynamicResource PalettePrimaryPressed}" />
             <Setter Property="Foreground" Value="White" />
+        </Style>
+
+        <!-- For neutral/utility actions (Refresh, …) that don't carry success/danger/warning/
+             primary weight but still shouldn't fall back to Fluent's bare default chrome —
+             the same problem the App Blocking window's dropdown trigger had. Built from
+             existing palette roles only (Surface/Background/Border/Text), nothing new. -->
+        <Style Selector="Button.secondary">
+            <Setter Property="Background" Value="{DynamicResource PaletteSurface}" />
+            <Setter Property="Foreground" Value="{DynamicResource PaletteText}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PaletteBorder}" />
+        </Style>
+        <Style Selector="Button.secondary:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource PaletteBackground}" />
+            <Setter Property="Foreground" Value="{DynamicResource PaletteText}" />
+        </Style>
+        <Style Selector="Button.secondary:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource PaletteBorder}" />
+            <Setter Property="Foreground" Value="{DynamicResource PaletteText}" />
         </Style>
     </Application.Styles>
 </Application>

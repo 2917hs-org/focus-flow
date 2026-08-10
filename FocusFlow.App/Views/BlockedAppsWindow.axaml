@@ -1,0 +1,131 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:viewModels="using:FocusFlow.App.ViewModels"
+        x:Class="FocusFlow.App.Views.BlockedAppsWindow"
+        x:DataType="viewModels:BlockedAppsViewModel"
+        Title="FocusFlow — Blocked Apps"
+        Icon="/Assets/app-icon.png"
+        Width="600"
+        Height="560"
+        MinWidth="520"
+        MinHeight="440"
+        Background="{DynamicResource PaletteBackground}"
+        Foreground="{DynamicResource PaletteText}">
+
+    <Window.Styles>
+        <!-- Same card look MainWindow uses, since this window doesn't share its styles. -->
+        <Style Selector="Border.card">
+            <Setter Property="Background" Value="{DynamicResource PaletteSurface}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PaletteBorder}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="Padding" Value="8" />
+        </Style>
+    </Window.Styles>
+
+    <!-- Two columns, roughly 53/47 (the blocked list's share taken down ~20% relative from
+         an earlier 65/35): the blocked list still gets the larger half since it's the thing
+         being reviewed and acted on, but the add-apps panel needed more than a third to show
+         its checklist comfortably. -->
+    <Grid Margin="24" RowDefinitions="Auto,*" RowSpacing="16" ColumnDefinitions="8*,7*" ColumnSpacing="20">
+        <StackPanel Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" Spacing="4">
+            <TextBlock Text="Blocked Apps" FontSize="18" FontWeight="SemiBold" />
+            <TextBlock Text="Hidden and replaced by FocusFlow the moment one of these comes to the front during a session."
+                       Foreground="{DynamicResource PaletteSecondary}"
+                       FontSize="11" TextWrapping="Wrap" />
+        </StackPanel>
+
+        <!-- Left: currently-blocked list. A checkbox per row rather than ListBox multi-
+             select — plain clicks select more than one, no Ctrl/Cmd- or Shift-click needed —
+             the same pattern the picker on the right uses. -->
+        <Grid Grid.Row="1" Grid.Column="0" RowDefinitions="Auto,*,Auto" RowSpacing="8">
+            <TextBlock Grid.Row="0" Text="Currently blocked" FontSize="11"
+                       Foreground="{DynamicResource PaletteSecondary}" />
+
+            <Border Grid.Row="1" Classes="card">
+                <ScrollViewer>
+                    <ItemsControl ItemsSource="{Binding BlockedApps}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}" Margin="0,3"
+                                          ToolTip.Tip="{Binding BundleId}">
+                                    <TextBlock Text="{Binding DisplayName}" TextWrapping="Wrap" />
+                                </CheckBox>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Border>
+
+            <!-- Same width as the list above them, not the whole window — both live in
+                 this column, which only spans the left ~65%. -->
+            <Grid Grid.Row="2" ColumnDefinitions="*,*" ColumnSpacing="8">
+                <Button Grid.Column="0" Content="Unblock" Classes="danger" HorizontalAlignment="Stretch"
+                        IsEnabled="{Binding HasBlockedApps}"
+                        Command="{Binding RemoveSelectedBlockedAppsCommand}" />
+                <!-- No Command binding: this one needs a confirmation first, handled in
+                     code-behind, before RemoveAllBlockedAppsCommand actually runs. -->
+                <Button x:Name="UnblockAllButton" Grid.Column="1" Content="Unblock all" Classes="danger"
+                        HorizontalAlignment="Stretch"
+                        IsEnabled="{Binding HasBlockedApps}" />
+            </Grid>
+        </Grid>
+
+        <!-- Right: add apps. Always visible rather than behind a dropdown/popup — with two
+             columns there's finally room for the checklist itself, so nothing needs hiding
+             behind a click first. -->
+        <Grid Grid.Row="1" Grid.Column="1" RowDefinitions="Auto,Auto,*,Auto,Auto,Auto" RowSpacing="8">
+            <TextBox Grid.Row="0" Text="{Binding AppSearchText, Mode=TwoWay}"
+                     PlaceholderText="Search apps…" />
+
+            <!-- Select all skips whichever app is frontmost right now — see
+                 BlockedAppsViewModel.SelectAllApps — so one click can't accidentally queue
+                 up blocking the app you're using to click it. -->
+            <Grid Grid.Row="1" ColumnDefinitions="*,*" ColumnSpacing="8">
+                <Button Grid.Column="0" Classes="secondary" Content="Select all"
+                        HorizontalAlignment="Stretch"
+                        Command="{Binding SelectAllAppsCommand}" />
+                <Button Grid.Column="1" Classes="secondary" Content="Clear"
+                        HorizontalAlignment="Stretch"
+                        Command="{Binding ClearSelectedAppsCommand}" />
+            </Grid>
+
+            <Border Grid.Row="2" Classes="card">
+                <ScrollViewer>
+                    <ItemsControl ItemsSource="{Binding FilteredApps}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}" Margin="0,3">
+                                    <TextBlock Text="{Binding App.DisplayName}" TextWrapping="Wrap" />
+                                </CheckBox>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Border>
+
+            <!-- Only appears when a real scan came back with nothing — see
+                 BlockedAppsViewModel.RefreshInstalledApps for why that's treated as a
+                 probable Spotlight problem rather than silently showing an empty list. -->
+            <TextBlock Grid.Row="3" Text="{Binding InstalledAppsWarning}"
+                       IsVisible="{Binding InstalledAppsWarning, Converter={x:Static ObjectConverters.IsNotNull}}"
+                       Foreground="{DynamicResource PaletteWarning}"
+                       FontSize="11" TextWrapping="Wrap" />
+
+            <Grid Grid.Row="4" ColumnDefinitions="*,*" ColumnSpacing="8">
+                <Button Grid.Column="0" Content="Block" Classes="info" HorizontalAlignment="Stretch"
+                        Command="{Binding AddSelectedAppsCommand}" />
+                <Button Grid.Column="1" Classes="secondary" Content="↻ Refresh" HorizontalAlignment="Stretch"
+                        ToolTip.Tip="Refresh the installed-apps list"
+                        Command="{Binding RefreshInstalledAppsCommand}" />
+            </Grid>
+
+            <Grid Grid.Row="5" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <TextBox Grid.Column="0" Text="{Binding ManualBundleId, Mode=TwoWay}"
+                         PlaceholderText="Bundle ID…" />
+                <Button Grid.Column="1" Classes="info" Content="Add"
+                        Command="{Binding AddManualBundleIdCommand}" />
+            </Grid>
+        </Grid>
+    </Grid>
+</Window>
