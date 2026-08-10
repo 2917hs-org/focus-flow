@@ -102,6 +102,36 @@ public class SessionHistoryTests : IDisposable
     }
 
     [Fact]
+    public void ARecordWrittenBeforeLabelExistedDeserialisesWithANullLabel()
+    {
+        // What every line already on disk before this feature shipped looks like — no
+        // "Label" property at all, not even a JSON null.
+        Directory.CreateDirectory(Path.GetDirectoryName(HistoryPath)!);
+        File.WriteAllText(HistoryPath,
+            "{\"SchemaVersion\":1,\"Id\":\"abc\",\"Mode\":\"Study\",\"Outcome\":\"Completed\","
+            + "\"StartedAt\":\"2026-07-30T09:00:00+00:00\",\"EndedAt\":\"2026-07-30T09:25:00+00:00\","
+            + "\"PlannedDuration\":\"00:25:00\",\"ActualDuration\":\"00:25:00\",\"SessionNumber\":1}"
+            + Environment.NewLine);
+
+        var read = new JsonLinesSessionHistoryStore(HistoryPath).Read();
+
+        Assert.Single(read);
+        Assert.Null(read[0].Label);
+    }
+
+    [Fact]
+    public void ASessionStartedWithALabelRoundTripsItThroughAppendAndRead()
+    {
+        var store = new JsonLinesSessionHistoryStore(HistoryPath);
+        store.Append(Record(TimerMode.Study, 25) with { Label = "Thesis chapter 3" });
+
+        var read = store.Read();
+
+        Assert.Single(read);
+        Assert.Equal("Thesis chapter 3", read[0].Label);
+    }
+
+    [Fact]
     public void SinceFiltersByEndTime_WhichIsWhatPerDayReportingNeeds()
     {
         var store = new JsonLinesSessionHistoryStore(HistoryPath);
@@ -134,6 +164,62 @@ public class SessionHistoryTests : IDisposable
         // ...but the abandoned 10 minutes were still time spent.
         Assert.Equal(TimeSpan.FromMinutes(60), summary.TotalStudyTime);
         Assert.Equal(TimeSpan.FromMinutes(5), summary.TotalBreakTime);
+    }
+
+    [Fact]
+    public void LabelTotalsGroupStudyTimeByLabel_BusiestFirst_UnlabelledIncluded()
+    {
+        var store = new JsonLinesSessionHistoryStore(HistoryPath);
+        store.Append(Record(TimerMode.Study, 25) with { Label = "Thesis chapter 3" });
+        store.Append(Record(TimerMode.Study, 10) with { Label = "Thesis chapter 3" });
+        store.Append(Record(TimerMode.Study, 15) with { Label = "Inbox zero" });
+        store.Append(Record(TimerMode.Study, 5));
+        // Break time under the same label as a labelled study run is still excluded — this
+        // is study-only, matching Summarise's "focused time" framing.
+        store.Append(Record(TimerMode.Break, 5) with { Label = "Thesis chapter 3" });
+
+        var service = new SessionHistoryService(
+            new TimerService(new TimerEngine(new FakeTimeProvider())), store, TimeProvider.System);
+
+        var totals = service.LabelTotalsSince();
+
+        Assert.Equal(3, totals.Count);
+        Assert.Equal("Thesis chapter 3", totals[0].Label);
+        Assert.Equal(TimeSpan.FromMinutes(35), totals[0].TotalTime);
+        Assert.Equal(2, totals[0].SessionCount);
+        Assert.Contains(totals, t => t.Label == "Inbox zero" && t.TotalTime == TimeSpan.FromMinutes(15));
+        Assert.Contains(totals, t => t.Label is null && t.TotalTime == TimeSpan.FromMinutes(5));
+    }
+
+    [Fact]
+    public void LabelTotalsGroupLabelsCaseInsensitively_MatchingHowTheHistoryFilterMatches()
+    {
+        // "Thesis" and "thesis" must land in the same bucket here, or the History window's
+        // by-label breakdown and its label filter would disagree on how many sessions a
+        // label covers — the filter already matches case-insensitively.
+        var store = new JsonLinesSessionHistoryStore(HistoryPath);
+        store.Append(Record(TimerMode.Study, 25) with { Label = "Thesis chapter 3" });
+        store.Append(Record(TimerMode.Study, 10) with { Label = "thesis chapter 3" });
+
+        var service = new SessionHistoryService(
+            new TimerService(new TimerEngine(new FakeTimeProvider())), store, TimeProvider.System);
+
+        var totals = service.LabelTotalsSince();
+
+        Assert.Single(totals);
+        Assert.Equal(TimeSpan.FromMinutes(35), totals[0].TotalTime);
+        Assert.Equal(2, totals[0].SessionCount);
+    }
+
+    [Fact]
+    public void LabelTotalsOnAnUnreadableLogReturnsEmptyRatherThanThrowing()
+    {
+        var service = new SessionHistoryService(
+            new TimerService(new TimerEngine(new FakeTimeProvider())),
+            new FailingHistoryStore(),
+            TimeProvider.System);
+
+        Assert.Empty(service.LabelTotalsSince());
     }
 
     [Fact]
@@ -204,6 +290,40 @@ public class SessionHistoryTests : IDisposable
         Assert.Equal(TimerMode.Study, read[0].Mode);
         Assert.Equal(SessionOutcome.Completed, read[0].Outcome);
         Assert.Equal(TimeSpan.FromMinutes(1), read[0].ActualDuration);
+    }
+
+    [Fact]
+    public async Task ALabelGivenAtStartIsCarriedThroughToTheLoggedRecord()
+    {
+        var clock = new FakeTimeProvider();
+        var store = new JsonLinesSessionHistoryStore(HistoryPath);
+        var service = new TimerService(new TimerEngine(clock));
+        using var history = new SessionHistoryService(service, store, clock);
+        history.StartTracking();
+
+        await service.StartAsync(Config(study: 1, @break: 1), "Thesis chapter 3");
+        clock.Run(TimeSpan.FromMinutes(1));
+
+        var read = store.Read();
+        Assert.Single(read);
+        Assert.Equal("Thesis chapter 3", read[0].Label);
+    }
+
+    [Fact]
+    public async Task StartingWithNoLabelLogsANullLabel()
+    {
+        var clock = new FakeTimeProvider();
+        var store = new JsonLinesSessionHistoryStore(HistoryPath);
+        var service = new TimerService(new TimerEngine(clock));
+        using var history = new SessionHistoryService(service, store, clock);
+        history.StartTracking();
+
+        await service.StartAsync(Config(study: 1, @break: 1));
+        clock.Run(TimeSpan.FromMinutes(1));
+
+        var read = store.Read();
+        Assert.Single(read);
+        Assert.Null(read[0].Label);
     }
 
     [Fact]

@@ -77,6 +77,12 @@
                    HorizontalAlignment="Center" FontSize="12"
                    TextWrapping="Wrap" TextAlignment="Center" />
 
+        <!-- Captured into the history record when Start is pressed; see
+             MainWindowViewModel.Start. Free text, no managed tag list. -->
+        <TextBox Text="{Binding SessionLabel}"
+                 PlaceholderText="Label this session (optional)"
+                 HorizontalAlignment="Stretch" />
+
         <!-- Transport -->
         <StackPanel x:Name="Transport" Orientation="Horizontal"
                     HorizontalAlignment="Center" Spacing="6">

@@ -24,7 +24,8 @@ public sealed class SessionEndedEventArgs : EventArgs
         DateTimeOffset startedAt,
         TimeSpan plannedDuration,
         TimeSpan actualDuration,
-        int sessionNumber)
+        int sessionNumber,
+        string? label = null)
     {
         CompletedMode = completedMode;
         NextMode = nextMode;
@@ -34,6 +35,7 @@ public sealed class SessionEndedEventArgs : EventArgs
         PlannedDuration = plannedDuration;
         ActualDuration = actualDuration;
         SessionNumber = sessionNumber;
+        Label = label;
     }
 
     /// <summary>The session that just finished — what the alert should talk about.</summary>
@@ -62,6 +64,9 @@ public sealed class SessionEndedEventArgs : EventArgs
     /// <summary>Which session of the run just finished.</summary>
     public int SessionNumber { get; }
 
+    /// <summary>What the user typed in before starting the run, if anything. See <see cref="SessionRecord.Label"/>.</summary>
+    public string? Label { get; }
+
     /// <summary>
     /// True when the user pressed Skip rather than the session running out. Consumers use
     /// this to suppress the alarm — an alert for something you deliberately skipped is noise.
@@ -80,7 +85,8 @@ public sealed class SessionEndedEventArgs : EventArgs
         EndedAt = endedAt,
         PlannedDuration = PlannedDuration,
         ActualDuration = ActualDuration,
-        SessionNumber = SessionNumber
+        SessionNumber = SessionNumber,
+        Label = Label
     };
 }
 
@@ -137,8 +143,12 @@ public interface ITimerEngine
     /// <summary>Fires once per session, shortly before it ends.</summary>
     event EventHandler<ReminderDueEventArgs>? ReminderDue;
 
-    /// <summary>Starts a fresh run at study session 1.</summary>
-    void Start(TimerConfig config);
+    /// <summary>
+    /// Starts a fresh run at study session 1. <paramref name="label"/> is what the user
+    /// typed in before starting, if anything — carried through every session of this run
+    /// into <see cref="SessionRecord.Label"/>.
+    /// </summary>
+    void Start(TimerConfig config, string? label = null);
 
     /// <summary>FR-002. Starts a standalone break without running a focus session first.</summary>
     void StartBreak(TimerConfig config);

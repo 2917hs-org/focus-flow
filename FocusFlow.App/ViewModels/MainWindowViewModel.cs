@@ -71,6 +71,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     [ObservableProperty] private string _currentTime = "25:00";
     [ObservableProperty] private string _statusText = "Ready";
+
+    /// <summary>
+    /// What the user typed into the label box, captured into the history record when Start
+    /// is pressed. Not persisted to settings — it's per-session, not a preference.
+    /// </summary>
+    [ObservableProperty] private string? _sessionLabel;
     [ObservableProperty] private string? _startupWarning;
     [ObservableProperty] private string? _appBlockingWarning;
     [ObservableProperty] private int _blockedAppCount;
@@ -347,7 +353,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         // Settings are already normalized and persisted, so the engine gets a validated
         // config rather than whatever is currently typed in the boxes.
-        await _timerService.StartAsync(_settings.Current);
+        var label = string.IsNullOrWhiteSpace(SessionLabel) ? null : SessionLabel.Trim();
+        await _timerService.StartAsync(_settings.Current, label);
     }
 
     /// <summary>FR-002. Runs a break on its own.</summary>
