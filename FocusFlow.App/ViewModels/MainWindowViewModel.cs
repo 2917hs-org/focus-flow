@@ -104,6 +104,24 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     [ObservableProperty] private IBrush _modeBrush = ModeBrushes.Idle;
     [ObservableProperty] private string _todaySummary = "No sessions yet today";
 
+    [ObservableProperty] private int _dailyGoalMinutes;
+
+    /// <summary>0-1, today's focused minutes against <see cref="DailyGoalMinutes"/>. Feeds
+    /// the ring's Arc.SweepAngle (via <see cref="GoalProgressSweepAngle"/>) and progress
+    /// bar-style controls alike — capped at 1 so a goal already blown past still draws a
+    /// closed circle rather than an Arc sweeping back over itself.</summary>
+    [ObservableProperty] private double _goalProgressRatio;
+
+    /// <summary>Degrees for the ring's foreground Arc — precomputed here rather than a
+    /// XAML converter, matching how every other display-ready value in this ViewModel
+    /// (e.g. <see cref="ManageBlockedAppsLabel"/>) is exposed already formatted.</summary>
+    [ObservableProperty] private double _goalProgressSweepAngle;
+
+    /// <summary>Label drawn inside the ring. Not capped at 100% — the ring itself closes at
+    /// a full circle, but the number is free to say "134%" so blowing past the goal is
+    /// still visible rather than indistinguishable from exactly meeting it.</summary>
+    [ObservableProperty] private string _goalProgressPercentText = "0%";
+
     public MainWindowViewModel(
         ITimerService timerService,
         INotificationService notificationService,
@@ -207,6 +225,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             ReminderLeadMinutes = Math.Max(1, (int)Math.Round(config.ReminderLeadTime.TotalMinutes));
             IdleAutoPauseEnabled = config.IdleAutoPauseEnabled;
             IdleAutoPauseMinutes = Math.Max(1, (int)Math.Round(config.IdleAutoPauseThreshold.TotalMinutes));
+            DailyGoalMinutes = config.DailyGoalMinutes;
             SelectedSound = ResolveSound(config.AlarmSoundPath);
 
             // Trust the OS over the config file: the user may have removed the login item
@@ -303,6 +322,28 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         Persist(c => c.IdleAutoPauseThreshold = TimeSpan.FromMinutes(value));
+    }
+
+    // Same reasoning as OnIdleAutoPauseMinutesChanged: an editable dropdown/spinner rather
+    // than something upstream already clamps, so FR-016's 15-720 minute range is enforced
+    // here. Also refreshes the ring immediately rather than waiting for the next tick, so
+    // dragging the goal around gives instant feedback. UpdateGoalRing rather than the
+    // heavier RefreshTodaySummary — only the target changed, not today's logged history.
+    partial void OnDailyGoalMinutesChanged(int value)
+    {
+        var clamped = Math.Clamp(value, TimerConfig.MinDailyGoalMinutes, TimerConfig.MaxDailyGoalMinutes);
+        if (clamped != value)
+        {
+            DailyGoalMinutes = clamped;
+            return;
+        }
+
+        Persist(c => c.DailyGoalMinutes = value);
+
+        if (!_loadingSettings)
+        {
+            UpdateGoalRing(_timerService.CurrentState);
+        }
     }
 
     partial void OnMusicPathChanged(string? value) => Persist(c => c.MusicPath = value);
@@ -827,6 +868,14 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
+    /// Today's history-backed focus minutes, as of the last <see cref="RefreshTodaySummary"/>
+    /// call. Cached rather than re-read on every tick: <see cref="UpdateGoalRing"/> runs from
+    /// <see cref="Apply"/> once a second, and a disk read that often would be wasteful when
+    /// only the still-running session's contribution actually changes that fast.
+    /// </summary>
+    private double _committedFocusMinutesToday;
+
+    /// <summary>
     /// Reads back today's totals from the history log. Deliberately minimal — reporting
     /// proper is a later piece of work; this exists so the stored data is visibly in use
     /// rather than write-only.
@@ -842,7 +891,55 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             : $"Today: {(int)focus.TotalHours}h {focus.Minutes:D2}m focused · "
               + $"{summary.CompletedStudySessions} session(s) completed";
 
-        OnUiThread(() => TodaySummary = text);
+        OnUiThread(() =>
+        {
+            TodaySummary = text;
+            _committedFocusMinutesToday = focus.TotalMinutes;
+            UpdateGoalRing(_timerService.CurrentState);
+        });
+    }
+
+    /// <summary>
+    /// FR-016. Recomputes the ring from <see cref="_committedFocusMinutesToday"/> plus
+    /// whatever the current session has racked up so far, so the ring moves with the
+    /// countdown instead of only jumping when a session ends. Called from <see cref="Apply"/>
+    /// on every tick (with the state already in hand) and from anything that changes one of
+    /// the two inputs — <see cref="RefreshTodaySummary"/> for the history side, the goal's
+    /// own setter for the target side — using <c>_timerService.CurrentState</c> since those
+    /// callers aren't already holding a state.
+    /// </summary>
+    private void UpdateGoalRing(SessionState state)
+    {
+        var liveMinutes = LiveInProgressFocusMinutes(state);
+        var goalMinutes = _settings.Current.DailyGoalMinutes;
+        var totalMinutes = _committedFocusMinutesToday + liveMinutes;
+
+        // Goal minutes is already normalized (never <= 0), but the ratio would be
+        // meaningless — or a divide-by-zero — if it somehow were, so guard anyway.
+        var rawRatio = goalMinutes > 0 ? totalMinutes / goalMinutes : 0;
+        var ratio = Math.Clamp(rawRatio, 0, 1);
+
+        GoalProgressRatio = ratio;
+        GoalProgressSweepAngle = ratio * 360;
+        GoalProgressPercentText = $"{(int)Math.Round(rawRatio * 100)}%";
+    }
+
+    /// <summary>
+    /// Minutes the current session has accumulated if it's an in-progress study session —
+    /// zero for a break or idle, matching how <c>HistorySummary.TotalStudyTime</c> itself
+    /// only totals Study-mode records. Frozen while paused rather than zeroed, since
+    /// <see cref="SessionState.RemainingTime"/> itself doesn't move while paused — see
+    /// FR013_Restore_ComesBackPausedSoNoTimeIsBurnedWhileTheAppWasClosed.
+    /// </summary>
+    private double LiveInProgressFocusMinutes(SessionState state)
+    {
+        if (state.Mode != TimerMode.Study)
+        {
+            return 0;
+        }
+
+        var elapsed = _settings.Current.StudyDuration - state.RemainingTime;
+        return elapsed > TimeSpan.Zero ? elapsed.TotalMinutes : 0;
     }
 
     private void OnReminderDue(object? sender, ReminderDueEventArgs e)
@@ -916,6 +1013,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         SessionProgress = state.Mode == TimerMode.Idle || planned <= TimeSpan.Zero
             ? 0
             : Math.Clamp(1 - (state.RemainingTime.TotalSeconds / planned.TotalSeconds), 0, 1);
+
+        // Every tick, not just on session end, so the goal ring moves along with the
+        // countdown instead of jumping only when a session finishes.
+        UpdateGoalRing(state);
 
         ModeBrush = state.Mode switch
         {
