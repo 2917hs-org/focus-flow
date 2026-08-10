@@ -24,7 +24,7 @@ public class TimerConfig
     /// import can recognise and migrate settings written by an older version, rather
     /// than having to guess from which fields happen to be present.
     /// </summary>
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
 
     public const int MinSessionCount = 1;
     public const int MaxSessionCount = 10;
@@ -82,6 +82,20 @@ public class TimerConfig
     public string? MusicPath { get; set; }
 
     public bool PlayMusicAfterBreak { get; set; }
+
+    /// <summary>
+    /// Loops a background track (rain/cafe/white-noise style) for the duration of a
+    /// Study session. Independent of the alarm above: its own file, its own volume, and
+    /// it never plays during a Break.
+    /// </summary>
+    public bool AmbientSoundEnabled { get; set; }
+
+    /// <summary>File to loop while <see cref="AmbientSoundEnabled"/> is true. No built-in
+    /// default — unlike <see cref="AlarmSoundPath"/>, null means "nothing to play".</summary>
+    public string? AmbientSoundPath { get; set; }
+
+    /// <summary>Ambient loop volume, 0-100, independent of <see cref="AlarmVolume"/>.</summary>
+    public int AmbientVolume { get; set; } = 50;
 
     /// <summary>FR-012. Register the app to start when the user logs in.</summary>
     public bool LaunchOnStartup { get; set; }
@@ -147,6 +161,9 @@ public class TimerConfig
         AlarmVolume = AlarmVolume,
         MusicPath = MusicPath,
         PlayMusicAfterBreak = PlayMusicAfterBreak,
+        AmbientSoundEnabled = AmbientSoundEnabled,
+        AmbientSoundPath = AmbientSoundPath,
+        AmbientVolume = AmbientVolume,
         LaunchOnStartup = LaunchOnStartup,
         ReminderEnabled = ReminderEnabled,
         ReminderLeadTime = ReminderLeadTime,
@@ -176,6 +193,7 @@ public class TimerConfig
 
         clone.SessionCount = Math.Clamp(clone.SessionCount, MinSessionCount, MaxSessionCount);
         clone.AlarmVolume = Math.Clamp(clone.AlarmVolume, MinVolume, MaxVolume);
+        clone.AmbientVolume = Math.Clamp(clone.AmbientVolume, MinVolume, MaxVolume);
 
         clone.ReminderLeadTime = clone.ReminderLeadTime < MinReminderLead ? MinReminderLead
             : clone.ReminderLeadTime > MaxReminderLead ? MaxReminderLead
@@ -194,6 +212,12 @@ public class TimerConfig
         {
             clone.MusicPath = null;
             clone.PlayMusicAfterBreak = false;
+        }
+
+        if (string.IsNullOrWhiteSpace(clone.AmbientSoundPath))
+        {
+            clone.AmbientSoundPath = null;
+            clone.AmbientSoundEnabled = false;
         }
 
         if (!Enum.IsDefined(clone.Theme))

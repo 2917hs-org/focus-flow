@@ -21,7 +21,7 @@ unsigned and largely unexercised; localization is not started — see
 
 | | |
 |---|---|
-| Tests | 164 passing (xUnit + `FakeTimeProvider`) |
+| Tests | 169 passing (xUnit + `FakeTimeProvider`) |
 | Builds | Debug + Release, both target frameworks, 0 warnings |
 | macOS | `.app` + DMG build and run; verified menu-bar and mini-widget behaviour |
 | Windows | Compiles, publishes and zips into a portable build — **the runtime path has never been executed** |
@@ -53,6 +53,12 @@ unsigned and largely unexercised; localization is not started — see
 - Native notifications — Action Center toasts on Windows, banners on macOS
 - Alarm sound with volume control, from built-in system sounds or your own WAV/MP3
 - Optional music when a break ends
+- **Optional looping ambient sound** for the duration of a Study session — its own on/off
+  toggle and volume, independent of the alarm above. Three bundled presets (white, pink
+  and brown noise, synthesized rather than recorded, so there's nothing to license) or any
+  WAV/MP3 of your own via the same file picker as the alarm. Study only, not Break: it
+  starts the moment a Study session is running and unpaused, and stops the instant it
+  pauses, ends, or a break starts
 - A warning window if the machine slept through the end of a session
 
 **Goals**
@@ -278,7 +284,7 @@ time spent; an immediate start-then-stop is discarded as a misclick.
 | Tray surface | Native menu: readout + all actions | Same |
 | Countdown | Rendered into the icon as `mm:ss`, ticking every second | Tooltip on hover |
 | Notifications | `osascript` | `ToastNotificationManagerCompat` |
-| Audio | `afplay -v` | MCI (`mciSendString`, winmm) |
+| Audio | `afplay -v`; ambient loop by relaunching afplay on exit | MCI (`mciSendString`, winmm); ambient loop via MCI's native `play … repeat` |
 | Launch at login | `~/Library/LaunchAgents` → `open -a` the bundle | `HKCU\…\CurrentVersion\Run` |
 | Pointer position | CoreGraphics `CGEventGetLocation` | `GetCursorPos` |
 | Idle detection | CoreGraphics `CGEventSourceSecondsSinceLastEventType` | `GetLastInputInfo` |
@@ -293,6 +299,26 @@ Deliberate deviations from the obvious choices:
   device handles both and ships with Windows, avoiding a dependency on NAudio or LibVLC.
   Windows *system-sound aliases* still go through `PlaySound` at system volume — the
   slider only affects file-based sounds.
+- **The ambient sound loop is a relaunch, not a native loop, on macOS.** afplay has no
+  loop flag, unlike Windows MCI's `play alias repeat`. `MacAudioPlayer` instead
+  pre-launches the next `afplay` process shortly before the current one is expected to
+  finish (probing duration via `afinfo`, the same OS-bundled family as afplay — cached
+  per file, so it's not shelled out to on every loop iteration) and lets the old one exit
+  on its own, so the two overlap briefly instead of leaving a gap — on its own channel
+  (`PlayAmbient`/`StopAmbient`) independent of the one-shot alarm/music channel
+  (`Play`/`Stop`), so an alarm or reminder can play over the loop without cutting it. If
+  `afinfo` can't determine a duration (unsupported format, missing tool), it falls back to
+  the simpler relaunch-on-exit approach this used before, which measured a consistent
+  ~20-30ms gap end-to-end. The overlap approach was verified the same way (real
+  `TimerEngine` driving a real session), and the achieved overlap runs longer than the
+  ~300ms it targets — afplay's measured process lifetime is consistently about a second
+  more than afinfo's own reported duration for that same file, and there's no way from
+  outside the process to tell how much of that is startup latency (silent, before the old
+  copy's audio has genuinely ended) versus shutdown drain (silent, after it has) without
+  literal audio-level measurement. That makes the lead time a lower bound on the real
+  overlap rather than a precise target — the safe direction to be imprecise in, since for
+  a continuous noise/rain texture a longer-than-intended overlap reads as nothing in
+  particular, where a gap would read as a click.
 - **The tray is Avalonia's `TrayIcon`, not WinForms `NotifyIcon`.** One implementation for
   both platforms, and no WinForms message pump inside an Avalonia app.
 - **Everything lives on the tray menu, not a popup window.** Two attempts at a window on
