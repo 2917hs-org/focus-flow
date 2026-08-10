@@ -6,13 +6,26 @@
         Title="FocusFlow — History"
         Icon="/Assets/app-icon.png"
         Width="440"
-        Height="520"
+        Height="620"
         MinWidth="360"
-        MinHeight="360"
+        MinHeight="420"
         Background="{DynamicResource PaletteBackground}"
         Foreground="{DynamicResource PaletteText}">
 
-    <Grid Margin="24" RowDefinitions="Auto,Auto,*">
+    <Window.Styles>
+        <!-- HistoryWindow's own Border.card: MainWindow and BlockedAppsWindow each define
+             this locally rather than sharing it from App.axaml, so this follows the same
+             pattern rather than introducing a new shared style. -->
+        <Style Selector="Border.card">
+            <Setter Property="Background" Value="{DynamicResource PaletteSurface}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PaletteBorder}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="Padding" Value="16" />
+        </Style>
+    </Window.Styles>
+
+    <Grid Margin="24" RowDefinitions="Auto,Auto,Auto,*">
 
         <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,12">
             <TextBlock Grid.Column="0" Text="Session History"
@@ -23,12 +36,54 @@
         </Grid>
 
         <Border Grid.Row="1" Classes="card" Margin="0,0,0,12">
-            <TextBlock Text="{Binding SummaryText}"
-                       TextWrapping="Wrap" TextAlignment="Center"
-                       HorizontalAlignment="Center" />
+            <StackPanel Spacing="6">
+                <TextBlock Text="{Binding SummaryText}"
+                           TextWrapping="Wrap" TextAlignment="Center"
+                           HorizontalAlignment="Center" />
+                <TextBlock Text="{Binding StreakText}"
+                           FontSize="12" FontWeight="SemiBold"
+                           Foreground="{DynamicResource PalettePrimary}"
+                           HorizontalAlignment="Center" />
+            </StackPanel>
         </Border>
 
-        <Grid Grid.Row="2">
+        <!-- Only shown once there's at least one day of study time in range — an empty
+             chart (fresh install, or a range with nothing in it) would just be an empty
+             card taking up space above the "No sessions" message below. -->
+        <Border Grid.Row="2" Classes="card" Margin="0,0,0,12" IsVisible="{Binding HasChartData}">
+            <StackPanel>
+                <TextBlock Text="Daily focus minutes" FontSize="12" FontWeight="SemiBold"
+                           Foreground="{DynamicResource PaletteSecondary}" Margin="0,0,0,10" />
+                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                    <ItemsControl ItemsSource="{Binding ChartBars}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="viewModels:DailyChartBar">
+                                <StackPanel Width="26" Margin="2,0" ToolTip.Tip="{Binding DayLabel}">
+                                    <!-- Fixed-height track so every bar's baseline lines up
+                                         regardless of its own height. -->
+                                    <Border Height="72">
+                                        <Border Height="{Binding BarHeight}" Width="14"
+                                                VerticalAlignment="Bottom" HorizontalAlignment="Center"
+                                                Background="{DynamicResource PalettePrimary}"
+                                                CornerRadius="3" />
+                                    </Border>
+                                    <TextBlock Text="{Binding DayLabel}" FontSize="9"
+                                               Foreground="{DynamicResource PaletteSecondary}"
+                                               HorizontalAlignment="Center" Margin="0,4,0,0" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </StackPanel>
+        </Border>
+
+        <Grid Grid.Row="3">
             <TextBlock Text="No sessions in this range."
                        Foreground="{DynamicResource PaletteSecondary}"
                        HorizontalAlignment="Center" VerticalAlignment="Center"

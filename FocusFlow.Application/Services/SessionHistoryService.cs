@@ -13,6 +13,9 @@ public sealed record HistorySummary(
     public static readonly HistorySummary Empty = new(0, TimeSpan.Zero, TimeSpan.Zero);
 }
 
+/// <summary>Total study minutes logged on one local calendar day.</summary>
+public sealed record DailyFocusMinutes(DateOnly Day, double Minutes);
+
 /// <summary>
 /// Records finished sessions to the local history log.
 /// </summary>
@@ -131,6 +134,89 @@ public sealed class SessionHistoryService : IDisposable
             return [];
         }
     }
+
+    /// <summary>
+    /// Below this, a study session doesn't count toward the streak even though it was
+    /// worth logging — an instant Stop is a change of mind, not a day of showing up.
+    /// Deliberately not restricted to <see cref="SessionOutcome.Completed"/>: most real
+    /// sessions in this log are Stopped or Skipped rather than run to zero, and a streak
+    /// that only recognises finished sessions would go dark on days someone genuinely
+    /// used the app.
+    /// </summary>
+    private static readonly TimeSpan MinimumStreakSessionDuration = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// Consecutive local days, up to and including today, with at least one study session
+    /// of at least <see cref="MinimumStreakSessionDuration"/> — any outcome. A day with
+    /// nothing logged yet doesn't break the streak until the day before it is also empty
+    /// — today isn't over yet, so yesterday's session still counts until a full day
+    /// passes with no session at all.
+    /// </summary>
+    public int CurrentStreak()
+    {
+        try
+        {
+            var activeDays = _store.Read()
+                .Where(r => r.Mode == TimerMode.Study && r.ActualDuration >= MinimumStreakSessionDuration)
+                .Select(r => LocalDay(r.EndedAt))
+                .ToHashSet();
+
+            if (activeDays.Count == 0)
+            {
+                return 0;
+            }
+
+            var today = LocalDay(_timeProvider.GetUtcNow());
+            var cursor = activeDays.Contains(today) ? today : today.AddDays(-1);
+
+            var streak = 0;
+            while (activeDays.Contains(cursor))
+            {
+                streak++;
+                cursor = cursor.AddDays(-1);
+            }
+
+            return streak;
+        }
+        catch (Exception e)
+        {
+            // Same reasoning as Summarise/GetRecords: an unreadable log degrades to "no
+            // streak" rather than an exception reaching the view model.
+            _logger?.Warn($"Reading session history failed: {e.Message}");
+            return 0;
+        }
+    }
+
+    /// <summary>
+    /// Total study minutes per local day since <paramref name="since"/>, oldest first —
+    /// the data behind a daily bar chart. Only days with at least one study session
+    /// appear; days with none are the caller's to fill in as zero.
+    /// </summary>
+    public IReadOnlyList<DailyFocusMinutes> DailyFocusMinutesSince(DateTimeOffset? since = null)
+    {
+        try
+        {
+            return _store.Read(since)
+                .Where(r => r.Mode == TimerMode.Study)
+                .GroupBy(r => LocalDay(r.EndedAt))
+                .Select(g => new DailyFocusMinutes(g.Key, g.Sum(r => r.ActualDuration.TotalMinutes)))
+                .OrderBy(d => d.Day)
+                .ToList();
+        }
+        catch (Exception e)
+        {
+            _logger?.Warn($"Reading session history failed: {e.Message}");
+            return [];
+        }
+    }
+
+    /// <summary>
+    /// Which local calendar day a UTC instant falls on, using the injected
+    /// <see cref="TimeProvider"/>'s local zone rather than the host's, so streak and
+    /// chart bucketing stay deterministic under <c>FakeTimeProvider</c> in tests.
+    /// </summary>
+    private DateOnly LocalDay(DateTimeOffset utc) =>
+        DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(utc, _timeProvider.LocalTimeZone).Date);
 
     public void Dispose()
     {

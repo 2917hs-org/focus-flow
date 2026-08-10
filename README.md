@@ -18,7 +18,7 @@ started — see [Not implemented](#not-implemented).
 
 | | |
 |---|---|
-| Tests | 107 passing (xUnit + `FakeTimeProvider`) |
+| Tests | 136 passing (xUnit + `FakeTimeProvider`) |
 | Builds | Debug + Release, both target frameworks, 0 warnings |
 | macOS | `.app` + DMG build and run; verified menu-bar and mini-widget behaviour |
 | Windows | Compiles, publishes and zips into a portable build — **the runtime path has never been executed** |
@@ -52,6 +52,10 @@ started — see [Not implemented](#not-implemented).
 - Settings survive restarts and are versioned for a future import/export
 - An interrupted session is restored on the next launch, always paused
 - Every finished session is appended to a history log for later reporting
+- The History window reports on that log: a range-filtered summary and session list, a
+  current streak (consecutive days with at least one 5+ minute study session — any
+  outcome, since most real sessions are stopped or skipped rather than run to zero), and
+  a bar chart of daily focus minutes
 - If any of that fails, **you are told** rather than left with silently missing data
 - A rolling local log (14-day retention) records what the app did, so a problem someone
   reports can actually be diagnosed after the fact
