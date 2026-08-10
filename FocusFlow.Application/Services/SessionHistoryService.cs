@@ -17,6 +17,13 @@ public sealed record HistorySummary(
 public sealed record DailyFocusMinutes(DateOnly Day, double Minutes);
 
 /// <summary>
+/// Total study time under one <see cref="SessionRecord.Label"/>. Null groups
+/// every session left unlabelled, so a range's label totals still add up to
+/// <see cref="HistorySummary.TotalStudyTime"/> rather than silently dropping sessions.
+/// </summary>
+public sealed record LabelTotal(string? Label, TimeSpan TotalTime, int SessionCount);
+
+/// <summary>
 /// Records finished sessions to the local history log.
 /// </summary>
 /// <remarks>
@@ -201,6 +208,40 @@ public sealed class SessionHistoryService : IDisposable
                 .GroupBy(r => LocalDay(r.EndedAt))
                 .Select(g => new DailyFocusMinutes(g.Key, g.Sum(r => r.ActualDuration.TotalMinutes)))
                 .OrderBy(d => d.Day)
+                .ToList();
+        }
+        catch (Exception e)
+        {
+            _logger?.Warn($"Reading session history failed: {e.Message}");
+            return [];
+        }
+    }
+
+    /// <summary>
+    /// Total study time and session count per label, since <paramref name="since"/>,
+    /// busiest label first. Study only — mirrors <see cref="Summarise"/>'s "focused time"
+    /// framing rather than folding in the paired break minutes a labelled run also carries.
+    /// </summary>
+    /// <remarks>
+    /// Grouped case-insensitively, matching how <c>HistoryViewModel</c>'s label filter
+    /// matches records — "Thesis" and "thesis" are the same label everywhere, not one
+    /// bucket here and two entries in the filtered list. The group's key keeps whichever
+    /// casing was typed first; it's a display label, not an identity.
+    /// </remarks>
+    public IReadOnlyList<LabelTotal> LabelTotalsSince(DateTimeOffset? since = null)
+    {
+        try
+        {
+            return _store.Read(since)
+                .Where(r => r.Mode == TimerMode.Study)
+                .GroupBy(
+                    r => string.IsNullOrWhiteSpace(r.Label) ? null : r.Label,
+                    StringComparer.OrdinalIgnoreCase)
+                .Select(g => new LabelTotal(
+                    g.Key,
+                    g.Aggregate(TimeSpan.Zero, (sum, r) => sum + r.ActualDuration),
+                    g.Count()))
+                .OrderByDescending(t => t.TotalTime)
                 .ToList();
         }
         catch (Exception e)

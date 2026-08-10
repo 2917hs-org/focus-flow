@@ -18,7 +18,11 @@ public enum HistoryRange
 }
 
 /// <summary>One row in the history list — pre-formatted so the view needs no converters.</summary>
-public sealed record HistoryEntry(string When, string Mode, string Outcome, string Duration);
+public sealed record HistoryEntry(string When, string Mode, string Outcome, string Duration, string? Label)
+{
+    /// <summary>Drives the label row's visibility — kept here rather than in the view so no converter is needed.</summary>
+    public bool HasLabel => !string.IsNullOrWhiteSpace(Label);
+}
 
 /// <summary>
 /// One bar in the daily-minutes chart. <see cref="BarHeight"/> is pre-computed in pixels
@@ -26,6 +30,12 @@ public sealed record HistoryEntry(string When, string Mode, string Outcome, stri
 /// pre-formatted — the view binds it straight to a Rectangle's Height with no converter.
 /// </summary>
 public sealed record DailyChartBar(string DayLabel, double Minutes, double BarHeight);
+
+/// <summary>One row in the "by label" breakdown — busiest label first, see <see cref="LabelTotal"/>.</summary>
+public sealed record LabelBreakdownEntry(string Label, string Duration, int SessionCount)
+{
+    public string Summary => SessionCount == 1 ? $"{Duration} · 1 session" : $"{Duration} · {SessionCount} sessions";
+}
 
 /// <summary>
 /// Reads back what <see cref="SessionHistoryService"/> has been logging all along.
@@ -40,14 +50,33 @@ public partial class HistoryViewModel : ObservableObject
     /// </summary>
     private const double MaxBarHeight = 72;
 
+    /// <summary>Sentinel item in <see cref="AvailableLabelFilters"/> meaning "don't filter".</summary>
+    private const string AllLabelsOption = "All sessions";
+
+    /// <summary>
+    /// Sentinel item in <see cref="AvailableLabelFilters"/> for the unlabelled bucket — a
+    /// real label can't collide with it since <see cref="SessionRecord.Label"/> is trimmed
+    /// and null/blank before it's ever saved.
+    /// </summary>
+    private const string NoLabelOption = "No label";
+
     private readonly SessionHistoryService _history;
     private readonly TimeProvider _timeProvider;
 
+    /// <summary>
+    /// True while <see cref="Refresh"/> is rebuilding <see cref="AvailableLabelFilters"/> —
+    /// clearing and repopulating that collection can bounce the label ComboBox's SelectedItem
+    /// through a transient null, and without this guard that would re-enter Refresh.
+    /// </summary>
+    private bool _refreshing;
+
     [ObservableProperty] private HistoryRange _selectedRange = HistoryRange.ThisWeek;
+    [ObservableProperty] private string _selectedLabelFilter = AllLabelsOption;
     [ObservableProperty] private string _summaryText = string.Empty;
     [ObservableProperty] private string _streakText = string.Empty;
     [ObservableProperty] private bool _hasEntries;
     [ObservableProperty] private bool _hasChartData;
+    [ObservableProperty] private bool _hasLabelBreakdown;
 
     public HistoryViewModel(SessionHistoryService history, TimeProvider timeProvider)
     {
@@ -59,6 +88,13 @@ public partial class HistoryViewModel : ObservableObject
     public IReadOnlyList<HistoryRange> AvailableRanges { get; } =
         [HistoryRange.Today, HistoryRange.ThisWeek, HistoryRange.ThisMonth, HistoryRange.AllTime];
 
+    /// <summary>
+    /// "All sessions" plus every distinct label in <see cref="SelectedRange"/>, busiest
+    /// first — rebuilt on every <see cref="Refresh"/> since which labels exist depends on
+    /// the range.
+    /// </summary>
+    public ObservableCollection<string> AvailableLabelFilters { get; } = [AllLabelsOption];
+
     /// <summary>Newest first — matches <see cref="SessionHistoryService.GetRecords"/>.</summary>
     public ObservableCollection<HistoryEntry> Entries { get; } = [];
 
@@ -68,7 +104,26 @@ public partial class HistoryViewModel : ObservableObject
     /// </summary>
     public ObservableCollection<DailyChartBar> ChartBars { get; } = [];
 
+    /// <summary>
+    /// Total study time per label in <see cref="SelectedRange"/> — always the whole range,
+    /// independent of <see cref="SelectedLabelFilter"/>, so this answers "where did my time
+    /// go" while the filter narrows the list below to "show me those sessions".
+    /// </summary>
+    public ObservableCollection<LabelBreakdownEntry> LabelBreakdown { get; } = [];
+
     partial void OnSelectedRangeChanged(HistoryRange value) => Refresh();
+
+    partial void OnSelectedLabelFilterChanged(string value)
+    {
+        OnPropertyChanged(nameof(EmptyStateText));
+
+        if (_refreshing)
+        {
+            return;
+        }
+
+        Refresh();
+    }
 
     /// <summary>
     /// Also a command rather than only an internal method: there is no live-update wiring
@@ -79,41 +134,73 @@ public partial class HistoryViewModel : ObservableObject
     [RelayCommand]
     private void Refresh()
     {
-        var since = Since(SelectedRange);
-        var summary = _history.Summarise(since);
-        var records = _history.GetRecords(since);
-
-        SummaryText = summary.CompletedStudySessions == 0 && summary.TotalStudyTime == TimeSpan.Zero
-            ? "No sessions in this range"
-            : $"{FormatDuration(summary.TotalStudyTime)} focused · "
-              + $"{FormatDuration(summary.TotalBreakTime)} on break · "
-              + $"{summary.CompletedStudySessions} session(s) completed";
-
-        // The streak is a global fact about the log, not scoped to SelectedRange — it
-        // wouldn't make sense for "your streak" to change depending on which filter is
-        // showing.
-        var streak = _history.CurrentStreak();
-        StreakText = streak switch
+        _refreshing = true;
+        try
         {
-            0 => "No active streak",
-            1 => "Current streak: 1 day",
-            _ => $"Current streak: {streak} days"
-        };
+            var since = Since(SelectedRange);
+            var summary = _history.Summarise(since);
+            var allRecords = _history.GetRecords(since);
+            var labelTotals = _history.LabelTotalsSince(since);
 
-        Entries.Clear();
-        foreach (var record in records)
-        {
-            Entries.Add(new HistoryEntry(
-                FormatWhen(record.EndedAt),
-                record.Mode == TimerMode.Study ? "Focus" : "Break",
-                record.Outcome.ToString(),
-                FormatDuration(record.ActualDuration)));
+            SummaryText = summary.CompletedStudySessions == 0 && summary.TotalStudyTime == TimeSpan.Zero
+                ? "No sessions in this range"
+                : $"{FormatDuration(summary.TotalStudyTime)} focused · "
+                  + $"{FormatDuration(summary.TotalBreakTime)} on break · "
+                  + $"{summary.CompletedStudySessions} session(s) completed";
+
+            // The streak is a global fact about the log, not scoped to SelectedRange — it
+            // wouldn't make sense for "your streak" to change depending on which filter is
+            // showing.
+            var streak = _history.CurrentStreak();
+            StreakText = streak switch
+            {
+                0 => "No active streak",
+                1 => "Current streak: 1 day",
+                _ => $"Current streak: {streak} days"
+            };
+
+            AvailableLabelFilters.Clear();
+            AvailableLabelFilters.Add(AllLabelsOption);
+            LabelBreakdown.Clear();
+            foreach (var total in labelTotals)
+            {
+                AvailableLabelFilters.Add(total.Label ?? NoLabelOption);
+                LabelBreakdown.Add(new LabelBreakdownEntry(
+                    total.Label ?? NoLabelOption, FormatDuration(total.TotalTime), total.SessionCount));
+            }
+
+            // A lone "No label" row would just restate the summary above in a second card —
+            // only worth showing once there's an actual label to compare it against.
+            HasLabelBreakdown = labelTotals.Any(t => t.Label is not null);
+
+            var filtered = SelectedLabelFilter switch
+            {
+                AllLabelsOption => allRecords,
+                NoLabelOption => allRecords.Where(r => string.IsNullOrWhiteSpace(r.Label)).ToList(),
+                var label => allRecords.Where(r =>
+                    string.Equals(r.Label, label, StringComparison.OrdinalIgnoreCase)).ToList()
+            };
+
+            Entries.Clear();
+            foreach (var record in filtered)
+            {
+                Entries.Add(new HistoryEntry(
+                    FormatWhen(record.EndedAt),
+                    record.Mode == TimerMode.Study ? "Focus" : "Break",
+                    record.Outcome.ToString(),
+                    FormatDuration(record.ActualDuration),
+                    record.Label));
+            }
+
+            HasEntries = Entries.Count > 0;
+            OnPropertyChanged(nameof(NoEntries));
+
+            RefreshChart(since);
         }
-
-        HasEntries = Entries.Count > 0;
-        OnPropertyChanged(nameof(NoEntries));
-
-        RefreshChart(since);
+        finally
+        {
+            _refreshing = false;
+        }
     }
 
     /// <summary>
@@ -152,6 +239,14 @@ public partial class HistoryViewModel : ObservableObject
     /// app avoids binding-expression syntax that isn't already proven to work here.
     /// </summary>
     public bool NoEntries => !HasEntries;
+
+    /// <summary>
+    /// Distinguishes "nothing in range" from "nothing under this label" so the label
+    /// filter narrowing the list to zero doesn't read as the log being broken.
+    /// </summary>
+    public string EmptyStateText => SelectedLabelFilter == AllLabelsOption
+        ? "No sessions in this range."
+        : "No sessions match this filter.";
 
     /// <summary>Null for <see cref="HistoryRange.AllTime"/> — matches the store's "null = everything".</summary>
     private DateTimeOffset? Since(HistoryRange range)

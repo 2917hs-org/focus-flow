@@ -62,6 +62,13 @@ public sealed class TimerEngine : ITimerEngine, IDisposable
     /// <summary>Full configured length of the current session, for the history log.</summary>
     private TimeSpan _sessionPlanned;
 
+    /// <summary>
+    /// What the user typed in before starting this run, if anything. Set once in
+    /// <see cref="BeginRun"/> and carried unchanged through every session the run rolls
+    /// into, since it labels the run rather than any one segment of it.
+    /// </summary>
+    private string? _sessionLabel;
+
     /// <summary>Last whole second handed to <see cref="Tick"/>, to avoid duplicate events.</summary>
     private TimeSpan _lastRaised = TimeSpan.MinValue;
 
@@ -102,7 +109,8 @@ public sealed class TimerEngine : ITimerEngine, IDisposable
     /// Starts a fresh run at session 1. Calling this while already running restarts with
     /// the new config rather than throwing — the UI can hand us a config at any time.
     /// </summary>
-    public void Start(TimerConfig config) => BeginRun(config, TimerMode.Study, standalone: false);
+    public void Start(TimerConfig config, string? label = null) =>
+        BeginRun(config, TimerMode.Study, standalone: false, label);
 
     /// <summary>FR-002. Runs a single break with no focus session attached.</summary>
     public void StartBreak(TimerConfig config) => BeginRun(config, TimerMode.Break, standalone: true);
@@ -124,7 +132,7 @@ public sealed class TimerEngine : ITimerEngine, IDisposable
         BeginRun(single, TimerMode.Study, standalone: true);
     }
 
-    private void BeginRun(TimerConfig config, TimerMode mode, bool standalone)
+    private void BeginRun(TimerConfig config, TimerMode mode, bool standalone, string? label = null)
     {
         ArgumentNullException.ThrowIfNull(config);
 
@@ -136,6 +144,7 @@ public sealed class TimerEngine : ITimerEngine, IDisposable
             _currentSession = 1;
             _isPaused = false;
             _singleSession = standalone;
+            _sessionLabel = label;
             _lastRaised = TimeSpan.MinValue;
             BeginSegment(DurationFor(mode));
             EnsureTimer(active: true);
@@ -168,6 +177,9 @@ public sealed class TimerEngine : ITimerEngine, IDisposable
             _currentSession = Math.Max(1, state.CurrentSession);
             _isPaused = true;
             _singleSession = false;
+            // Not persisted with the crash-recovery snapshot, so a restored run comes back
+            // unlabelled rather than inheriting whatever a previous run happened to leave set.
+            _sessionLabel = null;
             _lastRaised = TimeSpan.MinValue;
 
             _segmentRemaining = state.RemainingTime > TimeSpan.Zero
@@ -244,7 +256,7 @@ public sealed class TimerEngine : ITimerEngine, IDisposable
                 GoIdle();
                 ended = new SessionEndedEventArgs(
                     completed, TimerMode.Idle, Snapshot(),
-                    SessionOutcome.Stopped, startedAt, planned, actual, number);
+                    SessionOutcome.Stopped, startedAt, planned, actual, number, _sessionLabel);
             }
             else
             {
@@ -422,7 +434,7 @@ public sealed class TimerEngine : ITimerEngine, IDisposable
             GoIdle();
             return new SessionEndedEventArgs(
                 completed, TimerMode.Idle, Snapshot(),
-                outcome, startedAt, planned, actual, number);
+                outcome, startedAt, planned, actual, number, _sessionLabel);
         }
 
         if (next == TimerMode.Study)
@@ -433,7 +445,7 @@ public sealed class TimerEngine : ITimerEngine, IDisposable
                 GoIdle();
                 return new SessionEndedEventArgs(
                     completed, TimerMode.Idle, Snapshot(),
-                    outcome, startedAt, planned, actual, number);
+                    outcome, startedAt, planned, actual, number, _sessionLabel);
             }
 
             _currentSession++;
@@ -463,7 +475,7 @@ public sealed class TimerEngine : ITimerEngine, IDisposable
         }
 
         return new SessionEndedEventArgs(
-            completed, next, Snapshot(), outcome, startedAt, planned, actual, number);
+            completed, next, Snapshot(), outcome, startedAt, planned, actual, number, _sessionLabel);
     }
 
     /// <summary>Time spent in the current session so far. Call under <see cref="_gate"/>.</summary>

@@ -28,9 +28,9 @@ public sealed class TimerService : ITimerService, IDisposable
     public event EventHandler<SystemResumedEventArgs>? SystemResumed;
     public event EventHandler<ReminderDueEventArgs>? ReminderDue;
 
-    public Task StartAsync(TimerConfig config)
+    public Task StartAsync(TimerConfig config, string? label = null)
     {
-        _timerEngine.Start(config);
+        _timerEngine.Start(config, label);
         return Task.CompletedTask;
     }
 

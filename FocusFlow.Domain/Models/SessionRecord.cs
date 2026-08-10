@@ -54,4 +54,10 @@ public sealed record SessionRecord
 
     /// <summary>Which session of the run this was.</summary>
     public int SessionNumber { get; init; }
+
+    /// <summary>
+    /// Free-text note the user typed in before starting, e.g. "Thesis chapter 3". Null for
+    /// sessions started without one, and for every record written before this field existed.
+    /// </summary>
+    public string? Label { get; init; }
 }

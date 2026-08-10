@@ -33,7 +33,11 @@ public interface ITimerService
     /// <summary>Fires shortly before a session ends.</summary>
     event EventHandler<ReminderDueEventArgs>? ReminderDue;
 
-    Task StartAsync(TimerConfig config);
+    /// <summary>
+    /// <paramref name="label"/> is what the user typed in before starting, if anything —
+    /// see <see cref="ITimerEngine.Start"/>.
+    /// </summary>
+    Task StartAsync(TimerConfig config, string? label = null);
 
     /// <summary>FR-002. Runs a single break with no focus session attached.</summary>
     Task StartBreakAsync(TimerConfig config);

@@ -25,12 +25,16 @@
         </Style>
     </Window.Styles>
 
-    <Grid Margin="24" RowDefinitions="Auto,Auto,Auto,*">
+    <Grid Margin="24" RowDefinitions="Auto,Auto,Auto,Auto,*">
 
-        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,12">
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,12">
             <TextBlock Grid.Column="0" Text="Session History"
                        FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center" />
-            <ComboBox Grid.Column="1"
+            <ComboBox Grid.Column="1" Margin="0,0,8,0"
+                      ItemsSource="{Binding AvailableLabelFilters}"
+                      SelectedItem="{Binding SelectedLabelFilter, Mode=TwoWay}"
+                      ToolTip.Tip="Filter by label" />
+            <ComboBox Grid.Column="2"
                       ItemsSource="{Binding AvailableRanges}"
                       SelectedItem="{Binding SelectedRange, Mode=TwoWay}" />
         </Grid>
@@ -83,8 +87,31 @@
             </StackPanel>
         </Border>
 
-        <Grid Grid.Row="3">
-            <TextBlock Text="No sessions in this range."
+        <!-- Whole-range totals per label — independent of the ComboBox filter above, which
+             only narrows the list further down. Only shown once there's an actual label to
+             break out; see HistoryViewModel.HasLabelBreakdown. -->
+        <Border Grid.Row="3" Classes="card" Margin="0,0,0,12" IsVisible="{Binding HasLabelBreakdown}">
+            <StackPanel Spacing="6">
+                <TextBlock Text="By label" FontSize="12" FontWeight="SemiBold"
+                           Foreground="{DynamicResource PaletteSecondary}" />
+                <ItemsControl ItemsSource="{Binding LabelBreakdown}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="viewModels:LabelBreakdownEntry">
+                            <Grid ColumnDefinitions="*,Auto" Margin="0,2">
+                                <TextBlock Grid.Column="0" Text="{Binding Label}"
+                                           TextTrimming="CharacterEllipsis" />
+                                <TextBlock Grid.Column="1" Text="{Binding Summary}"
+                                           FontSize="11" Foreground="{DynamicResource PaletteSecondary}"
+                                           Margin="8,0,0,0" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </Border>
+
+        <Grid Grid.Row="4">
+            <TextBlock Text="{Binding EmptyStateText}"
                        Foreground="{DynamicResource PaletteSecondary}"
                        HorizontalAlignment="Center" VerticalAlignment="Center"
                        IsVisible="{Binding NoEntries}" />
@@ -99,7 +126,7 @@
                      BorderThickness="0">
                 <ListBox.ItemTemplate>
                     <DataTemplate DataType="viewModels:HistoryEntry">
-                        <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto"
+                        <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto"
                               Margin="0,4">
                             <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding Mode}"
                                        FontWeight="SemiBold" />
@@ -110,6 +137,11 @@
                             <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Outcome}"
                                        FontSize="11" Foreground="{DynamicResource PaletteSecondary}"
                                        HorizontalAlignment="Right" />
+                            <TextBlock Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
+                                       Text="{Binding Label}" IsVisible="{Binding HasLabel}"
+                                       FontSize="11" FontStyle="Italic"
+                                       Foreground="{DynamicResource PaletteSecondary}"
+                                       TextWrapping="Wrap" Margin="0,2,0,0" />
                         </Grid>
                     </DataTemplate>
                 </ListBox.ItemTemplate>

@@ -238,13 +238,18 @@ Nothing leaves the machine.
 `history.jsonl` is [JSON Lines](https://jsonlines.org) — one self-contained object per line:
 
 ```json
-{"SchemaVersion":1,"Id":"563ad8ee…","Mode":"Study","Outcome":"Completed","StartedAt":"2026-07-30T09:00:00+00:00","EndedAt":"2026-07-30T09:25:00+00:00","PlannedDuration":"00:25:00","ActualDuration":"00:25:00","SessionNumber":1}
+{"SchemaVersion":1,"Id":"563ad8ee…","Mode":"Study","Outcome":"Completed","StartedAt":"2026-07-30T09:00:00+00:00","EndedAt":"2026-07-30T09:25:00+00:00","PlannedDuration":"00:25:00","ActualDuration":"00:25:00","SessionNumber":1,"Label":"Thesis chapter 3"}
 ```
 
 Chosen over a single JSON array because appending never rewrites earlier records, a process
 killed mid-write can only damage the final line (which is skipped on read), and any tool can
 stream it a line at a time. Enums are written as **names**, not ordinals, so a record stays
 readable if the enum changes. Timestamps are UTC so a DST shift can't reorder the log.
+
+`Label` is the optional free-text note typed into the box next to Start — null when left
+blank, and also null on every record written before this field existed (a missing property
+deserialises the same as an explicit one). It labels the run, not a managed tag: there's no
+list to maintain and no way to relabel a session after the fact.
 
 Both planned and actual durations are kept, and `Outcome` distinguishes `Completed`,
 `Skipped` and `Stopped` — enough to derive totals and completion rates later without
