@@ -34,6 +34,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     /// </summary>
     public event EventHandler<(string Heading, string Body)>? AlertRequested;
 
+    /// <summary>"View History" chosen — show the session history window. Same reasoning
+    /// as <see cref="AlertRequested"/>: App owns the window, not the ViewModel.</summary>
+    public event EventHandler? ShowHistoryRequested;
+
     /// <summary>
     /// Set while pushing stored settings into the bound properties, so the resulting
     /// change notifications don't loop straight back into <see cref="ISettingsService"/>.
@@ -344,6 +348,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     [RelayCommand]
     private void StopAudio() => _audioPlayer.Stop();
+
+    [RelayCommand]
+    private void ShowHistory() => ShowHistoryRequested?.Invoke(this, EventArgs.Empty);
 
     private bool CanStart() => !IsSessionActive;
 

@@ -112,6 +112,26 @@ public sealed class SessionHistoryService : IDisposable
         records.Where(r => r.Mode == mode)
             .Aggregate(TimeSpan.Zero, (sum, r) => sum + r.ActualDuration);
 
+    /// <summary>
+    /// The individual records behind <see cref="Summarise"/>, newest first — this is the
+    /// "later" the class doc comment refers to: a reporting view reading them back rather
+    /// than just totalling them.
+    /// </summary>
+    public IReadOnlyList<SessionRecord> GetRecords(DateTimeOffset? since = null)
+    {
+        try
+        {
+            return _store.Read(since).OrderByDescending(r => r.EndedAt).ToList();
+        }
+        catch (Exception e)
+        {
+            // Same reasoning as Summarise: an unreadable log degrades to "no history
+            // shown" rather than an exception reaching the view model.
+            _logger?.Warn($"Reading session history failed: {e.Message}");
+            return [];
+        }
+    }
+
     public void Dispose()
     {
         if (_disposed)
