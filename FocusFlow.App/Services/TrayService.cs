@@ -78,6 +78,9 @@ public sealed class TrayService : ITrayService, IDisposable
         _resetItem = Action("↺  Reset", () => ResetRequested);
         _stopItem = Action("⏹︎  Stop", () => StopRequested);
 
+        // Gesture labels start empty and are filled in by UpdateHotkeys once the caller
+        // knows the actual (possibly user-customized) combinations — see its remarks.
+
         // No bare "Start" item: it would start whatever length is currently saved in
         // settings, with no way to tell from the tray what that length actually is. The
         // labelled options below and "Open Main Window" (where the length is visible) are
@@ -199,6 +202,24 @@ public sealed class TrayService : ITrayService, IDisposable
         _skipItem.IsVisible = status.CanSkip;
         _resetItem.IsVisible = status.CanReset;
         _stopItem.IsVisible = status.CanStop;
+    }
+
+    /// <summary>
+    /// Updates the shortcut labels shown next to Pause/Resume/Stop/Skip. Labels only — this
+    /// menu belongs to the status item, not the app's main menu bar, so macOS/Windows never
+    /// wire a NativeMenuItem's Gesture here up as a real accelerator the way they would for
+    /// a menu-bar item; the actual key handling comes from IGlobalHotkeys. Pushed in by the
+    /// caller (rather than this class reading ISettingsService itself) for the same reason
+    /// UpdateStatus takes a snapshot instead of reading state on its own — a null slot
+    /// clears that item's label.
+    /// </summary>
+    public void UpdateHotkeys(HotkeyCombo? startPause, HotkeyCombo? stop, HotkeyCombo? skip)
+    {
+        var startPauseGesture = HotkeyPresentation.ToKeyGesture(startPause);
+        _pauseItem.Gesture = startPauseGesture;
+        _resumeItem.Gesture = startPauseGesture;
+        _stopItem.Gesture = HotkeyPresentation.ToKeyGesture(stop);
+        _skipItem.Gesture = HotkeyPresentation.ToKeyGesture(skip);
     }
 
     private NativeMenuItem PredefinedAction(string header, int minutes)

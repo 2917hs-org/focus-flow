@@ -51,38 +51,49 @@
 
     <StackPanel x:Name="Root" Margin="24" Spacing="16">
 
-        <!-- Countdown -->
-        <StackPanel Spacing="4">
-            <TextBlock Text="{Binding CurrentTime}"
-                       FontSize="46"
-                       FontWeight="Light"
-                       Foreground="{Binding ModeBrush}"
-                       HorizontalAlignment="Center" />
-            <TextBlock Text="{Binding StatusText}"
-                       Foreground="{DynamicResource PaletteSecondary}"
-                       HorizontalAlignment="Center" />
-        </StackPanel>
+        <!-- Countdown, with the history icon tucked in the top-right corner rather than a
+             labelled button of its own — same glyph the tray menu already uses for the
+             same action, so it doesn't introduce a new visual vocabulary. -->
+        <Grid>
+            <StackPanel Spacing="4">
+                <TextBlock Text="{Binding CurrentTime}"
+                           FontSize="46"
+                           FontWeight="Light"
+                           Foreground="{Binding ModeBrush}"
+                           HorizontalAlignment="Center" />
+                <TextBlock Text="{Binding StatusText}"
+                           Foreground="{DynamicResource PaletteSecondary}"
+                           HorizontalAlignment="Center" />
+            </StackPanel>
+
+            <Button Content="▤" Command="{Binding ShowHistoryCommand}"
+                    HorizontalAlignment="Right" VerticalAlignment="Top"
+                    Padding="6,2" FontSize="14"
+                    ToolTip.Tip="View History" />
+        </Grid>
 
         <TextBlock Text="{Binding TodaySummary}"
                    Foreground="{DynamicResource PaletteSecondary}"
                    HorizontalAlignment="Center" FontSize="12"
                    TextWrapping="Wrap" TextAlignment="Center" />
 
-        <Button Content="View History" Command="{Binding ShowHistoryCommand}"
-                HorizontalAlignment="Center" Padding="8,2" FontSize="11" />
-
         <!-- Transport -->
         <StackPanel x:Name="Transport" Orientation="Horizontal"
                     HorizontalAlignment="Center" Spacing="6">
-            <Button Content="Start" Classes="success" Command="{Binding StartCommand}" />
+            <Button Content="Start" Classes="success" Command="{Binding StartCommand}"
+                    ToolTip.Tip="{Binding StartPauseHotkeyTooltip}" />
             <Button Content="Break" Classes="info" Command="{Binding StartBreakCommand}" />
             <Button Content="Pause" Classes="warning" Command="{Binding PauseCommand}"
-                    IsVisible="{Binding CanPauseNow}" />
+                    IsVisible="{Binding CanPauseNow}"
+                    ToolTip.Tip="{Binding StartPauseHotkeyTooltip}" />
             <Button Content="Resume" Classes="success" Command="{Binding ResumeCommand}"
-                    IsVisible="{Binding IsPausedNow}" />
-            <Button Content="Skip" Command="{Binding SkipCommand}" />
+                    IsVisible="{Binding IsPausedNow}"
+                    ToolTip.Tip="{Binding StartPauseHotkeyTooltip}" />
+            <Button Content="Skip" Command="{Binding SkipCommand}"
+                    ToolTip.Tip="{Binding SkipHotkeyTooltip}" />
             <Button Content="Reset" Command="{Binding ResetCommand}" />
-            <Button Content="Stop" Classes="danger" Command="{Binding StopCommand}" />
+            <Button Content="Stop" Classes="danger" Command="{Binding StopCommand}"
+                    ToolTip.Tip="{Binding StopHotkeyTooltip}" />
         </StackPanel>
 
         <!-- Sessions card -->
@@ -226,6 +237,60 @@
                            IsVisible="{Binding StartupWarning, Converter={x:Static ObjectConverters.IsNotNull}}"
                            Foreground="{DynamicResource PaletteSecondary}"
                            FontSize="11" TextWrapping="Wrap" />
+            </StackPanel>
+        </Border>
+
+        <!-- Hotkeys card. Combinations work even while FocusFlow isn't focused — see
+             IGlobalHotkeys. Click a row's button to capture a new combination; Esc cancels.
+             The checkbox turns that action's hotkey off without forgetting the combination,
+             so turning it back on later remembers what was set before. Set-once-and-forget
+             like the other cards' "More … options" content, so the rows themselves live in
+             an Expander rather than sitting open by default. -->
+        <Border Classes="card">
+            <StackPanel Spacing="12">
+                <TextBlock Text="Hotkeys" FontWeight="SemiBold" />
+                <TextBlock Text="Work even while FocusFlow isn't the focused app."
+                           Foreground="{DynamicResource PaletteSecondary}"
+                           FontSize="11" TextWrapping="Wrap" />
+
+                <Expander Header="More hotkey options">
+                    <StackPanel Spacing="12">
+                        <Grid ColumnDefinitions="Auto,*,Auto,Auto" RowDefinitions="Auto,Auto,Auto"
+                              ColumnSpacing="8" RowSpacing="8">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Start / Pause" VerticalAlignment="Center" />
+                            <Button Grid.Row="0" Grid.Column="1" Content="{Binding StartPauseHotkeyDisplay}"
+                                    Command="{Binding BeginCaptureStartPauseHotkeyCommand}"
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" />
+                            <CheckBox Grid.Row="0" Grid.Column="2" VerticalAlignment="Center"
+                                      IsChecked="{Binding StartPauseHotkeyEnabled, Mode=TwoWay}" />
+                            <Button Grid.Row="0" Grid.Column="3" Content="Reset" FontSize="10" Padding="6,2"
+                                    Command="{Binding ResetStartPauseHotkeyCommand}" />
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Stop" VerticalAlignment="Center" />
+                            <Button Grid.Row="1" Grid.Column="1" Content="{Binding StopHotkeyDisplay}"
+                                    Command="{Binding BeginCaptureStopHotkeyCommand}"
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" />
+                            <CheckBox Grid.Row="1" Grid.Column="2" VerticalAlignment="Center"
+                                      IsChecked="{Binding StopHotkeyEnabled, Mode=TwoWay}" />
+                            <Button Grid.Row="1" Grid.Column="3" Content="Reset" FontSize="10" Padding="6,2"
+                                    Command="{Binding ResetStopHotkeyCommand}" />
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Skip" VerticalAlignment="Center" />
+                            <Button Grid.Row="2" Grid.Column="1" Content="{Binding SkipHotkeyDisplay}"
+                                    Command="{Binding BeginCaptureSkipHotkeyCommand}"
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" />
+                            <CheckBox Grid.Row="2" Grid.Column="2" VerticalAlignment="Center"
+                                      IsChecked="{Binding SkipHotkeyEnabled, Mode=TwoWay}" />
+                            <Button Grid.Row="2" Grid.Column="3" Content="Reset" FontSize="10" Padding="6,2"
+                                    Command="{Binding ResetSkipHotkeyCommand}" />
+                        </Grid>
+
+                        <TextBlock Text="{Binding HotkeyWarning}"
+                                   IsVisible="{Binding HotkeyWarning, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                   Foreground="{DynamicResource PaletteSecondary}"
+                                   FontSize="11" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Expander>
             </StackPanel>
         </Border>
 

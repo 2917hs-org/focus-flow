@@ -69,6 +69,27 @@ public class ConfigPersistenceTests : IDisposable
     }
 
     [Fact]
+    public void SaveThenLoad_RoundTripsHotkeyBindings()
+    {
+        // HotkeyModifiers is the first [Flags] enum in this codebase — confirms
+        // JsonStringEnumConverter round-trips a combined flag value rather than assuming.
+        var storage = new JsonConfigStorage(ConfigPath);
+        var saved = new TimerConfig
+        {
+            StartPauseHotkey = new HotkeyBinding(true, HotkeyModifiers.Control | HotkeyModifiers.Alt | HotkeyModifiers.Meta, "P"),
+            StopHotkey = new HotkeyBinding(false, HotkeyModifiers.Control | HotkeyModifiers.Shift, "S"),
+            SkipHotkey = new HotkeyBinding()
+        };
+
+        storage.Save(saved);
+        var loaded = storage.Load();
+
+        Assert.Equal(saved.StartPauseHotkey, loaded.StartPauseHotkey);
+        Assert.Equal(saved.StopHotkey, loaded.StopHotkey);
+        Assert.Equal(saved.SkipHotkey, loaded.SkipHotkey);
+    }
+
+    [Fact]
     public void Load_OnAMissingFile_ReturnsDefaults()
     {
         var loaded = new JsonConfigStorage(ConfigPath).Load();
@@ -140,6 +161,23 @@ public class ConfigPersistenceTests : IDisposable
         clone.BlockedAppIds.Add("com.apple.mail");
 
         Assert.Single(original.BlockedAppIds);
+    }
+
+    [Fact]
+    public void SettingsService_PersistsWhenOnlyAHotkeyBindingChanges()
+    {
+        // Regression: AreEquivalent used to compare only a subset of TimerConfig's fields,
+        // so an update touching nothing but a hotkey binding looked like a no-op and was
+        // silently dropped — never saved, despite IGlobalHotkeys.Apply already having taken
+        // effect live.
+        var clock = new FakeTimeProvider();
+        var storage = new JsonConfigStorage(ConfigPath);
+        using var settings = new SettingsService(storage, clock);
+
+        settings.Update(c => c.SkipHotkey = new HotkeyBinding(true, HotkeyModifiers.Control | HotkeyModifiers.Shift, "K"));
+        clock.Advance(TimeSpan.FromSeconds(1));
+
+        Assert.Equal("K", storage.Load().SkipHotkey.Key);
     }
 
     [Fact]

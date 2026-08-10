@@ -92,6 +92,15 @@ public class TimerConfig
     /// </summary>
     public List<string> BlockedAppIds { get; set; } = [];
 
+    /// <summary>Global hotkey for the start/pause/resume toggle. See IGlobalHotkeys.</summary>
+    public HotkeyBinding StartPauseHotkey { get; set; } = new();
+
+    /// <summary>Global hotkey to stop the current session.</summary>
+    public HotkeyBinding StopHotkey { get; set; } = new();
+
+    /// <summary>Global hotkey to skip to the next session.</summary>
+    public HotkeyBinding SkipHotkey { get; set; } = new();
+
     public TimerConfig Clone() => new()
     {
         SchemaVersion = SchemaVersion,
@@ -109,7 +118,12 @@ public class TimerConfig
         ReminderEnabled = ReminderEnabled,
         ReminderLeadTime = ReminderLeadTime,
         Theme = Theme,
-        BlockedAppIds = [..BlockedAppIds]
+        BlockedAppIds = [..BlockedAppIds],
+        // HotkeyBinding is an immutable record — a reference copy is a safe, sufficient
+        // clone, unlike BlockedAppIds above which is a genuinely mutable collection.
+        StartPauseHotkey = StartPauseHotkey,
+        StopHotkey = StopHotkey,
+        SkipHotkey = SkipHotkey
     };
 
     /// <summary>
@@ -160,7 +174,29 @@ public class TimerConfig
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
+        clone.StartPauseHotkey = NormalizedHotkey(clone.StartPauseHotkey);
+        clone.StopHotkey = NormalizedHotkey(clone.StopHotkey);
+        clone.SkipHotkey = NormalizedHotkey(clone.SkipHotkey);
+
         return clone;
+    }
+
+    /// <summary>
+    /// A hand-edited config file could set Modifiers without a Key, or set the field to
+    /// JSON null outright (a missing field keeps the constructor default, but an explicit
+    /// null overrides it) — neither is meaningful, so clean it up rather than propagate it
+    /// into a native registration attempt.
+    /// </summary>
+    private static HotkeyBinding NormalizedHotkey(HotkeyBinding? binding)
+    {
+        if (binding is null)
+        {
+            return new HotkeyBinding();
+        }
+
+        return string.IsNullOrEmpty(binding.Key) && binding.Modifiers != HotkeyModifiers.None
+            ? binding with { Modifiers = HotkeyModifiers.None }
+            : binding;
     }
 
     private static TimeSpan Clamp(TimeSpan value, TimeSpan fallback, TimeSpan max)

@@ -38,4 +38,10 @@ public interface ITrayService
     /// a way to open it programmatically.
     /// </remarks>
     void UpdateStatus(TrayStatus status);
+
+    /// <summary>
+    /// Updates the shortcut labels shown next to the Pause/Resume/Stop/Skip menu items. A
+    /// null slot clears that item's label. Purely cosmetic — see TrayService's remarks.
+    /// </summary>
+    void UpdateHotkeys(HotkeyCombo? startPause, HotkeyCombo? stop, HotkeyCombo? skip);
 }

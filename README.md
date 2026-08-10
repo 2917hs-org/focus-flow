@@ -12,13 +12,16 @@ menu.
 ## Status
 
 The timer, persistence, session history, the tray surface, the always-on-top mini timer
-widget, local logging and macOS packaging are done and covered by tests. Windows packaging
-is scripted but unsigned and largely unexercised; global hotkeys and localization are not
-started — see [Not implemented](#not-implemented).
+widget, local logging and macOS packaging are done and covered by tests. Global hotkeys,
+including custom capture and conflict detection, are done too — the conflict/policy logic
+is unit tested, but the native OS registration itself isn't (see
+[Platform implementations](#platform-implementations)). Windows packaging is scripted but
+unsigned and largely unexercised; localization is not started — see
+[Not implemented](#not-implemented).
 
 | | |
 |---|---|
-| Tests | 136 passing (xUnit + `FakeTimeProvider`) |
+| Tests | 144 passing (xUnit + `FakeTimeProvider`) |
 | Builds | Debug + Release, both target frameworks, 0 warnings |
 | macOS | `.app` + DMG build and run; verified menu-bar and mini-widget behaviour |
 | Windows | Compiles, publishes and zips into a portable build — **the runtime path has never been executed** |
@@ -61,6 +64,15 @@ started — see [Not implemented](#not-implemented).
   reports can actually be diagnosed after the fact
 
 **Platform**
+- **Global hotkeys** — work while FocusFlow isn't focused: start/pause/resume toggle,
+  stop, and skip. Default combinations — macOS: `⌃⌥⌘P` / `⌃⌥⌘S` / `⌃⌥⌘K`; Windows:
+  `Ctrl+Alt+Shift+P` / `Ctrl+Alt+Shift+S` / `Ctrl+Alt+Shift+K` — but each is customizable
+  from the Hotkeys card in Settings: click a row to capture a new letter/digit combination
+  (at least one modifier required), toggle it off without losing the combination, or reset
+  to the default. Conflicts between FocusFlow's own three shortcuts are rejected outright;
+  a combination already claimed by another app is reported rather than silently ignored.
+  The effective combination shows as a tooltip on the relevant buttons and in the tray
+  menu, when that shortcut is enabled.
 - Menu bar shows the live countdown (mm:ss, ticking every second, like the macOS
   Stopwatch's own menu bar readout); system tray shows it on hover
 - A small always-on-top widget floats above every window for the length of a session —
@@ -254,6 +266,7 @@ time spent; an immediate start-then-stop is discarded as a misclick.
 | Pointer position | CoreGraphics `CGEventGetLocation` | `GetCursorPos` |
 | Sleep detection | Poll-gap heuristic (shared) | Poll-gap heuristic (shared) |
 | App blocking | Polls `NSWorkspace.frontmostApplication` (~500ms); hides the match and activates FocusFlow via `objc_msgSend`. Gated on `AXIsProcessTrusted` | Not implemented — no-op |
+| Global hotkeys | Carbon `RegisterEventHotKey`/`InstallEventHandler` on the app's own main run loop — no permission required | `RegisterHotKey` delivered to a hidden window on a dedicated message-loop thread |
 
 Deliberate deviations from the obvious choices:
 
@@ -303,8 +316,6 @@ negative space so the mark still reads.
 
 ## Not implemented
 
-- **Global hotkeys** — needs `RegisterHotKey` on Windows and an Accessibility-permission
-  monitor on macOS.
 - **Windows MSIX is scripted but unsigned and unverified**; no Winget manifest or installer.
   The portable zip is the only path anyone has actually produced and inspected.
 - **Code signing / notarisation** on either platform.

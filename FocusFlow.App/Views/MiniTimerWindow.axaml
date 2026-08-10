@@ -102,12 +102,15 @@
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="6">
                 <Button Content="Pause" Classes="mini-pause" Padding="8,3" FontSize="11"
                         Command="{Binding PauseCommand}"
-                        IsVisible="{Binding CanPauseNow}" />
+                        IsVisible="{Binding CanPauseNow}"
+                        ToolTip.Tip="{Binding StartPauseHotkeyTooltip}" />
                 <Button Content="Resume" Classes="mini-resume" Padding="8,3" FontSize="11"
                         Command="{Binding ResumeCommand}"
-                        IsVisible="{Binding IsPausedNow}" />
+                        IsVisible="{Binding IsPausedNow}"
+                        ToolTip.Tip="{Binding StartPauseHotkeyTooltip}" />
                 <Button Content="Stop" Classes="mini-stop" Padding="8,3" FontSize="11"
-                        Command="{Binding StopCommand}" />
+                        Command="{Binding StopCommand}"
+                        ToolTip.Tip="{Binding StopHotkeyTooltip}" />
             </StackPanel>
         </StackPanel>
     </Border>
