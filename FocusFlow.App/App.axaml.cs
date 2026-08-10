@@ -147,6 +147,7 @@ public partial class App : Avalonia.Application
             WireMiniTimer(viewModel);
 
             WireTray(viewModel);
+            WireGlobalHotkeys(viewModel);
 
             viewModel.AlertRequested += (sender, e) => ShowAlert(e.Heading, e.Body);
             viewModel.ShowHistoryRequested += (sender, e) => Dispatcher.UIThread.Post(ShowHistory);
@@ -265,6 +266,40 @@ public partial class App : Avalonia.Application
                     ? $"{blocked.DisplayName} will be hidden during focus sessions."
                     : "Couldn't tell which app was frontmost, or it's already blocked.");
         });
+    }
+
+    /// <summary>
+    /// Fixed OS-level shortcuts (see README) drive the same commands the tray and window
+    /// do, so they can never fall out of sync with what's actually available. Unlike the
+    /// tray — which can show separate Pause/Resume items — a hotkey can't display state, so
+    /// the start/pause combination is a single toggle: whichever of Start/Pause/Resume is
+    /// currently enabled is the one it fires.
+    /// </summary>
+    private void WireGlobalHotkeys(MainWindowViewModel viewModel)
+    {
+        if (_provider?.GetRequiredService<IGlobalHotkeys>() is not { } hotkeys)
+        {
+            return;
+        }
+
+        hotkeys.StartPauseRequested += (sender, e) => Dispatcher.UIThread.Post(() =>
+        {
+            if (viewModel.StartCommand.CanExecute(null))
+            {
+                viewModel.StartCommand.Execute(null);
+            }
+            else if (viewModel.PauseCommand.CanExecute(null))
+            {
+                viewModel.PauseCommand.Execute(null);
+            }
+            else if (viewModel.ResumeCommand.CanExecute(null))
+            {
+                viewModel.ResumeCommand.Execute(null);
+            }
+        });
+
+        hotkeys.StopRequested += (sender, e) => Run(viewModel.StopCommand);
+        hotkeys.SkipRequested += (sender, e) => Run(viewModel.SkipCommand);
     }
 
     /// <summary>
@@ -394,6 +429,7 @@ public partial class App : Avalonia.Application
         services.AddSingleton<IPointerLocator, WindowsPointerLocator>();
         services.AddSingleton<IMenuBarCountdown, NoopMenuBarCountdown>();
         services.AddSingleton<IAppBlockingMonitor, NoopAppBlockingMonitor>();
+        services.AddSingleton<IGlobalHotkeys, WindowsGlobalHotkeys>();
 #else
         services.AddSingleton<INotificationService, MacNotificationService>();
         services.AddSingleton<IAudioPlayer, MacAudioPlayer>();
@@ -401,6 +437,7 @@ public partial class App : Avalonia.Application
         services.AddSingleton<IPointerLocator, MacPointerLocator>();
         services.AddSingleton<IMenuBarCountdown, NativeMenuBarCountdown>();
         services.AddSingleton<IAppBlockingMonitor, MacAppBlockingMonitor>();
+        services.AddSingleton<IGlobalHotkeys, MacGlobalHotkeys>();
 #endif
 
         services.AddSingleton<MainWindowViewModel>();

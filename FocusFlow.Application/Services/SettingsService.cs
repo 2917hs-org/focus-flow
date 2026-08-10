@@ -139,7 +139,13 @@ public sealed class SettingsService : ISettingsService, IDisposable
         && a.AutoStartBreak == b.AutoStartBreak
         && a.AutoStartStudy == b.AutoStartStudy
         && a.AlarmSoundPath == b.AlarmSoundPath
-        && a.BlockedAppIds.SequenceEqual(b.BlockedAppIds, StringComparer.OrdinalIgnoreCase);
+        && a.BlockedAppIds.SequenceEqual(b.BlockedAppIds, StringComparer.OrdinalIgnoreCase)
+        // Record equality, so this is a value comparison, not a reference one — required
+        // here: without it, an update that changes only a hotkey binding would look like a
+        // no-op and never persist, even though IGlobalHotkeys.Apply already took effect.
+        && a.StartPauseHotkey == b.StartPauseHotkey
+        && a.StopHotkey == b.StopHotkey
+        && a.SkipHotkey == b.SkipHotkey;
 
     public void Dispose()
     {

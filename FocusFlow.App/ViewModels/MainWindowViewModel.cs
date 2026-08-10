@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
@@ -14,6 +15,7 @@ using FocusFlow.Application.Interfaces;
 using FocusFlow.Application.Services;
 using FocusFlow.Domain.Interfaces;
 using FocusFlow.Domain.Models;
+using FocusFlow.Domain.Services;
 
 namespace FocusFlow.App.ViewModels;
 
@@ -28,6 +30,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly IFilePickerService _filePicker;
     private readonly SessionHistoryService _history;
     private readonly IAppBlockingService _appBlocking;
+    private readonly IGlobalHotkeys _globalHotkeys;
 
     /// <summary>
     /// Raised for things the user must actually see. App owns the window; the ViewModel
@@ -72,6 +75,20 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string? _appBlockingWarning;
     [ObservableProperty] private int _blockedAppCount;
 
+    [ObservableProperty] private HotkeyCaptureTarget _capturingHotkey;
+    [ObservableProperty] private string? _hotkeyWarning;
+    [ObservableProperty] private string _startPauseHotkeyDisplay = "";
+    [ObservableProperty] private string _stopHotkeyDisplay = "";
+    [ObservableProperty] private string _skipHotkeyDisplay = "";
+    [ObservableProperty] private bool _startPauseHotkeyEnabled;
+    [ObservableProperty] private bool _stopHotkeyEnabled;
+    [ObservableProperty] private bool _skipHotkeyEnabled;
+
+    /// <summary>Null suppresses the tooltip entirely — bound to the transport buttons' ToolTip.Tip.</summary>
+    [ObservableProperty] private string? _startPauseHotkeyTooltip;
+    [ObservableProperty] private string? _stopHotkeyTooltip;
+    [ObservableProperty] private string? _skipHotkeyTooltip;
+
     /// <summary>
     /// Colours the countdown and progress bar by what is running, so the mode is readable
     /// at a glance without parsing the status line. Indigo matches the app icon.
@@ -88,7 +105,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         IStartupService startupService,
         IFilePickerService filePicker,
         SessionHistoryService history,
-        IAppBlockingService appBlocking)
+        IAppBlockingService appBlocking,
+        IGlobalHotkeys globalHotkeys)
     {
         _timerService = timerService;
         _notificationService = notificationService;
@@ -99,12 +117,14 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _filePicker = filePicker;
         _history = history;
         _appBlocking = appBlocking;
+        _globalHotkeys = globalHotkeys;
 
         AvailableSounds = new ObservableCollection<AlarmSound>(audioPlayer.AvailableSounds);
 
         LoadFromSettings();
         RefreshAppBlockingSupport();
         BlockedAppCount = _settings.Current.BlockedAppIds.Count;
+        InitializeHotkeys();
 
         _timerService.TimerUpdated += OnTimerUpdated;
         _timerService.SessionEnded += OnSessionEnded;
@@ -403,6 +423,297 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         AppBlockingWarning = IsAppBlockingSupported
             ? null
             : "FocusFlow needs Accessibility access to hide blocked apps during a session.";
+    }
+
+    /// <summary>
+    /// Applies whatever is currently stored in settings to the OS and the tray, and
+    /// refreshes the display/tooltip properties. Called once at construction, before
+    /// App.axaml.cs wires the fire events to commands, so the hotkeys are already live by
+    /// the time that happens.
+    /// </summary>
+    private void InitializeHotkeys()
+    {
+        var config = _settings.Current;
+        ApplyAndRefresh(config.StartPauseHotkey, config.StopHotkey, config.SkipHotkey, persist: false);
+    }
+
+    private const string ListeningLabel = "Press keys… (Esc to cancel)";
+
+    [RelayCommand]
+    private void BeginCaptureStartPauseHotkey()
+    {
+        CapturingHotkey = HotkeyCaptureTarget.StartPause;
+        StartPauseHotkeyDisplay = ListeningLabel;
+        HotkeyWarning = null;
+    }
+
+    [RelayCommand]
+    private void BeginCaptureStopHotkey()
+    {
+        CapturingHotkey = HotkeyCaptureTarget.Stop;
+        StopHotkeyDisplay = ListeningLabel;
+        HotkeyWarning = null;
+    }
+
+    [RelayCommand]
+    private void BeginCaptureSkipHotkey()
+    {
+        CapturingHotkey = HotkeyCaptureTarget.Skip;
+        SkipHotkeyDisplay = ListeningLabel;
+        HotkeyWarning = null;
+    }
+
+    public void CancelHotkeyCapture()
+    {
+        CapturingHotkey = HotkeyCaptureTarget.None;
+        RefreshHotkeyDisplays();
+    }
+
+    /// <summary>
+    /// Called by MainWindow's window-level KeyDown handler once a non-modifier key arrives
+    /// while <see cref="CapturingHotkey"/> is set.
+    /// </summary>
+    public void CompleteHotkeyCapture(Key key, KeyModifiers modifiers)
+    {
+        if (CapturingHotkey == HotkeyCaptureTarget.None)
+        {
+            return;
+        }
+
+        var target = CapturingHotkey;
+
+        var domainModifiers = HotkeyModifiers.None;
+        if (modifiers.HasFlag(KeyModifiers.Control))
+        {
+            domainModifiers |= HotkeyModifiers.Control;
+        }
+
+        if (modifiers.HasFlag(KeyModifiers.Alt))
+        {
+            domainModifiers |= HotkeyModifiers.Alt;
+        }
+
+        if (modifiers.HasFlag(KeyModifiers.Shift))
+        {
+            domainModifiers |= HotkeyModifiers.Shift;
+        }
+
+        if (modifiers.HasFlag(KeyModifiers.Meta))
+        {
+            domainModifiers |= HotkeyModifiers.Meta;
+        }
+
+        if (domainModifiers == HotkeyModifiers.None)
+        {
+            HotkeyWarning = "Add at least one modifier key (Ctrl, Alt, Shift, or Cmd).";
+            return;
+        }
+
+        if (!IsSupportedHotkeyKey(key))
+        {
+            HotkeyWarning = "Use a letter or number key.";
+            return;
+        }
+
+        var candidate = new HotkeyBinding(Enabled: true, domainModifiers, key.ToString());
+        var config = _settings.Current;
+
+        var startPause = target == HotkeyCaptureTarget.StartPause ? candidate : config.StartPauseHotkey;
+        var stop = target == HotkeyCaptureTarget.Stop ? candidate : config.StopHotkey;
+        var skip = target == HotkeyCaptureTarget.Skip ? candidate : config.SkipHotkey;
+
+        if (TryApplyHotkeys(startPause, stop, skip))
+        {
+            CapturingHotkey = HotkeyCaptureTarget.None;
+            return;
+        }
+
+        // Still capturing — restore the "listening" label over whatever TryApplyHotkeys
+        // just redrew, so the row makes it obvious another attempt is expected.
+        switch (target)
+        {
+            case HotkeyCaptureTarget.StartPause:
+                StartPauseHotkeyDisplay = ListeningLabel;
+                break;
+            case HotkeyCaptureTarget.Stop:
+                StopHotkeyDisplay = ListeningLabel;
+                break;
+            case HotkeyCaptureTarget.Skip:
+                SkipHotkeyDisplay = ListeningLabel;
+                break;
+        }
+    }
+
+    /// <summary>Only letters and digits — see MacGlobalHotkeys/WindowsGlobalHotkeys' keycode tables.</summary>
+    private static bool IsSupportedHotkeyKey(Key key) =>
+        key is >= Key.A and <= Key.Z || key is >= Key.D0 and <= Key.D9;
+
+    [RelayCommand]
+    private void ResetStartPauseHotkey()
+    {
+        var config = _settings.Current;
+        TryApplyHotkeys(new HotkeyBinding(), config.StopHotkey, config.SkipHotkey);
+    }
+
+    [RelayCommand]
+    private void ResetStopHotkey()
+    {
+        var config = _settings.Current;
+        TryApplyHotkeys(config.StartPauseHotkey, new HotkeyBinding(), config.SkipHotkey);
+    }
+
+    [RelayCommand]
+    private void ResetSkipHotkey()
+    {
+        var config = _settings.Current;
+        TryApplyHotkeys(config.StartPauseHotkey, config.StopHotkey, new HotkeyBinding());
+    }
+
+    partial void OnStartPauseHotkeyEnabledChanged(bool value)
+    {
+        if (_loadingSettings)
+        {
+            return;
+        }
+
+        var config = _settings.Current;
+        TryApplyHotkeys(config.StartPauseHotkey with { Enabled = value }, config.StopHotkey, config.SkipHotkey);
+    }
+
+    partial void OnStopHotkeyEnabledChanged(bool value)
+    {
+        if (_loadingSettings)
+        {
+            return;
+        }
+
+        var config = _settings.Current;
+        TryApplyHotkeys(config.StartPauseHotkey, config.StopHotkey with { Enabled = value }, config.SkipHotkey);
+    }
+
+    partial void OnSkipHotkeyEnabledChanged(bool value)
+    {
+        if (_loadingSettings)
+        {
+            return;
+        }
+
+        var config = _settings.Current;
+        TryApplyHotkeys(config.StartPauseHotkey, config.StopHotkey, config.SkipHotkey with { Enabled = value });
+    }
+
+    /// <summary>
+    /// Validates the trio doesn't conflict with itself, applies it natively and to the
+    /// tray, and — on success — persists it. Reverts to the last-persisted trio and sets
+    /// <see cref="HotkeyWarning"/> on either kind of failure. Returns whether it succeeded.
+    /// </summary>
+    private bool TryApplyHotkeys(HotkeyBinding startPause, HotkeyBinding stop, HotkeyBinding skip)
+    {
+        // HotkeyPolicy.Conflicts has to run on resolved combinations, not the raw
+        // bindings: an empty Key means "use this action's own platform default," and two
+        // different actions' defaults share the same empty-Key/no-modifiers shape even
+        // though they resolve to different physical keys (P vs S vs K) — comparing the raw
+        // bindings directly made every action look like it conflicted with every other one
+        // the moment the other two were still unset.
+        var startPauseResolved = ToComparableBinding(HotkeyDefaults.Resolve(startPause, HotkeyDefaults.StartPause));
+        var stopResolved = ToComparableBinding(HotkeyDefaults.Resolve(stop, HotkeyDefaults.Stop));
+        var skipResolved = ToComparableBinding(HotkeyDefaults.Resolve(skip, HotkeyDefaults.Skip));
+
+        if (HotkeyPolicy.Conflicts(startPauseResolved, stopResolved)
+            || HotkeyPolicy.Conflicts(startPauseResolved, skipResolved)
+            || HotkeyPolicy.Conflicts(stopResolved, skipResolved))
+        {
+            HotkeyWarning = "That combination is already used by another FocusFlow shortcut.";
+            RefreshHotkeyDisplays();
+            return false;
+        }
+
+        if (!ApplyAndRefresh(startPause, stop, skip, persist: true))
+        {
+            // Revert the OS/tray state to whatever is still actually persisted.
+            var config = _settings.Current;
+            ApplyAndRefresh(config.StartPauseHotkey, config.StopHotkey, config.SkipHotkey, persist: false);
+            HotkeyWarning = "Couldn't set that combination — it may already be in use by another app.";
+            return false;
+        }
+
+        HotkeyWarning = null;
+        return true;
+    }
+
+    /// <summary>
+    /// Turns a resolved combination (or the absence of one) into a literal HotkeyBinding —
+    /// no empty-Key/default ambiguity left — so HotkeyPolicy.Conflicts can compare it
+    /// meaningfully against another action's resolved combination.
+    /// </summary>
+    private static HotkeyBinding ToComparableBinding(HotkeyCombo? combo) =>
+        combo is { } value ? new HotkeyBinding(true, value.Modifiers, value.Key) : new HotkeyBinding(false);
+
+    /// <summary>
+    /// Resolves the trio to concrete combinations, applies them to the OS and the tray,
+    /// optionally persists, and refreshes the display/tooltip properties either way.
+    /// </summary>
+    private bool ApplyAndRefresh(HotkeyBinding startPause, HotkeyBinding stop, HotkeyBinding skip, bool persist)
+    {
+        var startPauseCombo = HotkeyDefaults.Resolve(startPause, HotkeyDefaults.StartPause);
+        var stopCombo = HotkeyDefaults.Resolve(stop, HotkeyDefaults.Stop);
+        var skipCombo = HotkeyDefaults.Resolve(skip, HotkeyDefaults.Skip);
+
+        var result = _globalHotkeys.Apply(startPauseCombo, stopCombo, skipCombo);
+
+        if (!result.AllOk)
+        {
+            return false;
+        }
+
+        _trayService.UpdateHotkeys(startPauseCombo, stopCombo, skipCombo);
+
+        if (persist)
+        {
+            Persist(c =>
+            {
+                c.StartPauseHotkey = startPause;
+                c.StopHotkey = stop;
+                c.SkipHotkey = skip;
+            });
+        }
+
+        StartPauseHotkeyDisplay = HotkeyPresentation.Format(startPauseCombo);
+        StopHotkeyDisplay = HotkeyPresentation.Format(stopCombo);
+        SkipHotkeyDisplay = HotkeyPresentation.Format(skipCombo);
+        StartPauseHotkeyTooltip = startPauseCombo is null ? null : StartPauseHotkeyDisplay;
+        StopHotkeyTooltip = stopCombo is null ? null : StopHotkeyDisplay;
+        SkipHotkeyTooltip = skipCombo is null ? null : SkipHotkeyDisplay;
+
+        _loadingSettings = true;
+        try
+        {
+            StartPauseHotkeyEnabled = startPause.Enabled;
+            StopHotkeyEnabled = stop.Enabled;
+            SkipHotkeyEnabled = skip.Enabled;
+        }
+        finally
+        {
+            _loadingSettings = false;
+        }
+
+        return true;
+    }
+
+    /// <summary>Redraws the display/tooltip/enabled properties from whatever is currently persisted, without touching the OS.</summary>
+    private void RefreshHotkeyDisplays()
+    {
+        var config = _settings.Current;
+        var startPauseCombo = HotkeyDefaults.Resolve(config.StartPauseHotkey, HotkeyDefaults.StartPause);
+        var stopCombo = HotkeyDefaults.Resolve(config.StopHotkey, HotkeyDefaults.Stop);
+        var skipCombo = HotkeyDefaults.Resolve(config.SkipHotkey, HotkeyDefaults.Skip);
+
+        StartPauseHotkeyDisplay = HotkeyPresentation.Format(startPauseCombo);
+        StopHotkeyDisplay = HotkeyPresentation.Format(stopCombo);
+        SkipHotkeyDisplay = HotkeyPresentation.Format(skipCombo);
+        StartPauseHotkeyTooltip = startPauseCombo is null ? null : StartPauseHotkeyDisplay;
+        StopHotkeyTooltip = stopCombo is null ? null : StopHotkeyDisplay;
+        SkipHotkeyTooltip = skipCombo is null ? null : SkipHotkeyDisplay;
     }
 
     private bool CanStart() => !IsSessionActive;
