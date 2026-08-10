@@ -3,6 +3,8 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Avalonia.Media;
+using Avalonia.Styling;
 using FocusFlow.App.Services;
 using FocusFlow.App.ViewModels;
 using FocusFlow.App.Views;
@@ -35,6 +37,52 @@ public partial class App : Avalonia.Application
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
+
+        // Static XAML resources apply to every platform unconditionally — a
+        // <Color x:Key="SystemAccentColor"> in App.axaml would put Apple's blue on the
+        // Windows build too, which is a bug, not a native look. Gating it here instead.
+        if (OperatingSystem.IsMacOS())
+        {
+            ApplyMacOSStyling();
+        }
+    }
+
+    /// <summary>
+    /// Retints FluentTheme's stock controls with macOS's system blue instead of its own,
+    /// and rounds the stock input controls' corners closer to macOS's than Fluent's
+    /// default 4px. The semantic success/warning/danger/info buttons in App.axaml already
+    /// set their own look and are untouched by either.
+    /// </summary>
+    private void ApplyMacOSStyling()
+    {
+        Resources["SystemAccentColor"] = Color.Parse("#007AFF");
+        Resources["SystemAccentColorLight1"] = Color.Parse("#2694FF");
+        Resources["SystemAccentColorLight2"] = Color.Parse("#4DABFF");
+        Resources["SystemAccentColorLight3"] = Color.Parse("#73C1FF");
+        Resources["SystemAccentColorDark1"] = Color.Parse("#0068D9");
+        Resources["SystemAccentColorDark2"] = Color.Parse("#0055B2");
+        Resources["SystemAccentColorDark3"] = Color.Parse("#00438C");
+
+        Styles.Add(RoundedCorners<Button>());
+        Styles.Add(RoundedCorners<ComboBox>());
+        Styles.Add(RoundedCorners<TextBox>());
+        Styles.Add(RoundedCorners<NumericUpDown>());
+    }
+
+    /// <summary>
+    /// Looked up through the property registry rather than a hardcoded
+    /// "<typeparamref name="T"/>.CornerRadiusProperty" reference, since which class in
+    /// the hierarchy actually declares it isn't this method's business to know.
+    /// </summary>
+    private static Style RoundedCorners<T>() where T : Control
+    {
+        var property = AvaloniaPropertyRegistry.Instance.FindRegistered(typeof(T), "CornerRadius")
+            ?? throw new InvalidOperationException($"{typeof(T).Name} has no CornerRadius property.");
+
+        return new Style(x => x.OfType<T>())
+        {
+            Setters = { new Setter(property, new CornerRadius(6)) }
+        };
     }
 
     public override void OnFrameworkInitializationCompleted()

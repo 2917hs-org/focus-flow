@@ -29,13 +29,20 @@ public sealed class WindowsStartupService : IStartupService
     private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string ValueName = "FocusFlow";
 
+    private readonly IAppLogger? _logger;
+
+    public WindowsStartupService(IAppLogger? logger = null)
+    {
+        _logger = logger;
+    }
+
     public bool IsSupported =>
         OperatingSystem.IsWindows() && !IsPackaged() && ExecutablePath() is not null;
 
     /// <summary>
     /// True when running from an MSIX package, where registry writes are virtualised.
     /// </summary>
-    private static bool IsPackaged()
+    private bool IsPackaged()
     {
         if (!OperatingSystem.IsWindows())
         {
@@ -52,6 +59,7 @@ public sealed class WindowsStartupService : IStartupService
         catch (Exception e) when (e is DllNotFoundException or EntryPointNotFoundException)
         {
             // Pre-Windows 8 kernel32 without the appmodel APIs: treat as unpackaged.
+            _logger?.Warn($"Package-identity check failed, assuming unpackaged: {e.Message}");
             return false;
         }
     }
@@ -73,6 +81,7 @@ public sealed class WindowsStartupService : IStartupService
         }
         catch (Exception e) when (e is SecurityException or UnauthorizedAccessException or IOException)
         {
+            _logger?.Warn($"Reading the login item failed: {e.Message}");
             return false;
         }
     }
@@ -106,6 +115,9 @@ public sealed class WindowsStartupService : IStartupService
         }
         catch (Exception e) when (e is SecurityException or UnauthorizedAccessException or IOException)
         {
+            // The caller already surfaces this as "Couldn't update the login item" —
+            // the detail below is what explains why, next time someone has to dig in.
+            _logger?.Warn($"Updating the login item failed: {e.Message}");
             return false;
         }
     }
