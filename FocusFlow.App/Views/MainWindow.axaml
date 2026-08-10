@@ -72,10 +72,34 @@
                     ToolTip.Tip="View History" />
         </Grid>
 
-        <TextBlock Text="{Binding TodaySummary}"
-                   Foreground="{DynamicResource PaletteSecondary}"
-                   HorizontalAlignment="Center" FontSize="12"
-                   TextWrapping="Wrap" TextAlignment="Center" />
+        <!-- Daily goal ring: a plain Ellipse track behind an Arc whose SweepAngle is
+             precomputed in the ViewModel (FR-016), same "give XAML a ready-to-bind value"
+             approach as ManageBlockedAppsLabel below. StartAngle=-90 puts the sweep's zero
+             point at 12 o'clock rather than Arc's own 3-o'clock default, so it reads like a
+             normal progress ring; SweepAngle is already clamped to a 0-360 range so a goal
+             blown past still closes into a full circle instead of overshooting. Both shapes
+             deflate their own geometry by StrokeThickness/2 (Avalonia's own Arc/Ellipse
+             behaviour, verified against source rather than assumed), so the ring fills this
+             Grid cell cleanly with no clipping or extra margin needed. Moves live, once a
+             second — see MainWindowViewModel.UpdateGoalRing — rather than only jumping when
+             a session ends. The goal itself is set from the Sessions card below, alongside
+             the other set-once-and-forget numbers, not here: this row is read-only glance
+             space, not another control competing for it. -->
+        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14" HorizontalAlignment="Center">
+            <Grid Grid.Column="0" Width="60" Height="60">
+                <Ellipse Stroke="{DynamicResource PaletteBorder}" StrokeThickness="6" />
+                <Arc StartAngle="-90" SweepAngle="{Binding GoalProgressSweepAngle}"
+                     Stroke="{DynamicResource PalettePrimary}" StrokeThickness="6"
+                     StrokeLineCap="Round" />
+                <TextBlock Text="{Binding GoalProgressPercentText}"
+                           FontSize="12" FontWeight="SemiBold"
+                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Grid>
+
+            <TextBlock Grid.Column="1" Text="{Binding TodaySummary}"
+                       Foreground="{DynamicResource PaletteSecondary}" FontSize="12"
+                       TextWrapping="Wrap" VerticalAlignment="Center" />
+        </Grid>
 
         <!-- Captured into the history record when Start is pressed; see
              MainWindowViewModel.Start. Free text, no managed tag list. -->
@@ -172,6 +196,18 @@
                                       Text="{Binding IdleAutoPauseMinutes, Mode=TwoWay}"
                                       IsEnabled="{Binding IdleAutoPauseEnabled}"
                                       Width="100" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="2" Text="min" VerticalAlignment="Center" Margin="4,0,0,0"
+                                       Foreground="{DynamicResource PaletteSecondary}" />
+                        </Grid>
+
+                        <!-- FR-016. Feeds the ring above the transport buttons — set-once-
+                             and-forget like the rest of this Expander, so it lives here
+                             rather than crowding the always-visible summary row. -->
+                        <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="8">
+                            <TextBlock Grid.Column="0" Text="Daily goal" VerticalAlignment="Center" />
+                            <NumericUpDown Grid.Column="1" Value="{Binding DailyGoalMinutes, Mode=TwoWay}"
+                                           Minimum="15" Maximum="720" Increment="15" FormatString="0"
+                                           Width="100" VerticalAlignment="Center" />
                             <TextBlock Grid.Column="2" Text="min" VerticalAlignment="Center" Margin="4,0,0,0"
                                        Foreground="{DynamicResource PaletteSecondary}" />
                         </Grid>

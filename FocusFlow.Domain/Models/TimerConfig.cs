@@ -42,6 +42,11 @@ public class TimerConfig
     public static readonly TimeSpan MinIdleThreshold = TimeSpan.FromMinutes(1);
     public static readonly TimeSpan MaxIdleThreshold = TimeSpan.FromMinutes(30);
 
+    /// <summary>FR-016. Bounds for the daily focus-minutes goal shown as a progress ring.</summary>
+    public const int MinDailyGoalMinutes = 15;
+    public const int MaxDailyGoalMinutes = 720;
+    public const int DefaultDailyGoalMinutes = 120;
+
     /// <summary>Schema of the file this was loaded from; see <see cref="CurrentSchemaVersion"/>.</summary>
     public int SchemaVersion { get; set; } = CurrentSchemaVersion;
 
@@ -109,6 +114,12 @@ public class TimerConfig
     public AppTheme Theme { get; set; } = AppTheme.System;
 
     /// <summary>
+    /// FR-016. Target focused minutes per day, visualised as a progress ring on the main
+    /// window against today's completed study time.
+    /// </summary>
+    public int DailyGoalMinutes { get; set; } = DefaultDailyGoalMinutes;
+
+    /// <summary>
     /// Bundle identifiers of apps to hide/foreground-intervene on while a session is
     /// running and unpaused. macOS only — see IAppBlockingMonitor.IsSupported.
     /// </summary>
@@ -142,6 +153,7 @@ public class TimerConfig
         IdleAutoPauseEnabled = IdleAutoPauseEnabled,
         IdleAutoPauseThreshold = IdleAutoPauseThreshold,
         Theme = Theme,
+        DailyGoalMinutes = DailyGoalMinutes,
         BlockedAppIds = [..BlockedAppIds],
         // HotkeyBinding is an immutable record — a reference copy is a safe, sufficient
         // clone, unlike BlockedAppIds above which is a genuinely mutable collection.
@@ -188,6 +200,13 @@ public class TimerConfig
         {
             clone.Theme = AppTheme.System;
         }
+
+        // Same fallback-vs-clamp split as the TimeSpan fields above: a zero or negative
+        // value (an unset field from a config written before this existed) snaps to the
+        // sensible default rather than the floor, while an out-of-range value is clamped.
+        clone.DailyGoalMinutes = clone.DailyGoalMinutes <= 0
+            ? DefaultDailyGoalMinutes
+            : Math.Clamp(clone.DailyGoalMinutes, MinDailyGoalMinutes, MaxDailyGoalMinutes);
 
         // A file written before versioning existed deserialises to 0; treat it as v1
         // rather than as something from the future.

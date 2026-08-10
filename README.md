@@ -55,6 +55,14 @@ unsigned and largely unexercised; localization is not started — see
 - Optional music when a break ends
 - A warning window if the machine slept through the end of a session
 
+**Goals**
+- A settable **daily focus-minutes goal** (15–720 min, default 120, set from the Sessions
+  card), shown as a circular progress ring on the main window against today's focused time —
+  logged sessions plus whatever the current session has racked up so far, moving live with
+  the countdown rather than only jumping when a session ends. The ring closes at a full
+  circle once the goal is met rather than overshooting; the percentage label inside it keeps
+  counting past 100% so beating the goal is still visible
+
 **Persistence** — all local, no network, no account
 - Settings survive restarts and are versioned for a future import/export
 - An interrupted session is restored on the next launch, always paused
@@ -233,7 +241,7 @@ Nothing leaves the machine.
 
 | File | Purpose |
 |---|---|
-| `config.json` | Settings. Versioned, indented, safe to hand-edit. |
+| `config.json` | Settings, including `DailyGoalMinutes` (the goal-ring target). Versioned, indented, safe to hand-edit. |
 | `session.json` | The in-flight session, for crash recovery. Deleted on a clean stop. |
 | `history.jsonl` | Append-only log of finished sessions. |
 | `instance.lock` | Held by the running instance; a stale one does not block startup. |

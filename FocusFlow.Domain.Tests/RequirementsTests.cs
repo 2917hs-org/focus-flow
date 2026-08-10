@@ -266,4 +266,26 @@ public class RequirementsTests
 
         Assert.Equal(TimerMode.Idle, engine.CurrentState.Mode);
     }
+
+    // ---- FR-016: daily goal ----------------------------------------------------------
+
+    [Fact]
+    public void FR016_DailyGoalMinutesIsClampedIntoItsValidRange()
+    {
+        Assert.Equal(TimerConfig.MaxDailyGoalMinutes,
+            new TimerConfig { DailyGoalMinutes = 9999 }.Normalized().DailyGoalMinutes);
+
+        Assert.Equal(TimerConfig.MinDailyGoalMinutes,
+            new TimerConfig { DailyGoalMinutes = 1 }.Normalized().DailyGoalMinutes);
+    }
+
+    [Fact]
+    public void FR016_DailyGoalMinutesOfZeroOrLessFallsBackToTheDefault()
+    {
+        Assert.Equal(TimerConfig.DefaultDailyGoalMinutes,
+            new TimerConfig { DailyGoalMinutes = 0 }.Normalized().DailyGoalMinutes);
+
+        Assert.Equal(TimerConfig.DefaultDailyGoalMinutes,
+            new TimerConfig { DailyGoalMinutes = -30 }.Normalized().DailyGoalMinutes);
+    }
 }
