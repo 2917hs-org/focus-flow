@@ -254,7 +254,7 @@ public partial class App : Avalonia.Application
             }
         });
 
-    private void ShowAlert(string heading, string body) =>
+    private static void ShowAlert(string heading, string body) =>
         Dispatcher.UIThread.Post(() => new AlertWindow(heading, body).Show());
 
     private static ServiceProvider BuildServiceProvider()

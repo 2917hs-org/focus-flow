@@ -103,7 +103,7 @@ public sealed class MacAudioPlayer : IAudioPlayer, IDisposable
         }
     }
 
-    private static IReadOnlyList<AlarmSound> DiscoverSounds()
+    private static List<AlarmSound> DiscoverSounds()
     {
         var sounds = new List<AlarmSound> { new("Default (Glass)", null) };
 

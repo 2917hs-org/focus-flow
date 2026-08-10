@@ -11,16 +11,17 @@ menu.
 
 ## Status
 
-The timer, persistence, session history, the tray surface and macOS packaging are done and
-covered by tests. Windows packaging, global hotkeys, logging and localization are not
+The timer, persistence, session history, the tray surface, the always-on-top mini timer
+widget, local logging and macOS packaging are done and covered by tests. Windows packaging
+is scripted but unsigned and largely unexercised; global hotkeys and localization are not
 started — see [Not implemented](#not-implemented).
 
 | | |
 |---|---|
-| Tests | 84 passing (xUnit + `FakeTimeProvider`) |
+| Tests | 107 passing (xUnit + `FakeTimeProvider`) |
 | Builds | Debug + Release, both target frameworks, 0 warnings |
-| macOS | `.app` + DMG build and run; verified menu-bar only |
-| Windows | Compiles and publishes — **the runtime path has never been executed** |
+| macOS | `.app` + DMG build and run; verified menu-bar and mini-widget behaviour |
+| Windows | Compiles, publishes and zips into a portable build — **the runtime path has never been executed** |
 
 ---
 
@@ -52,11 +53,17 @@ history as an abandoned session. Breaks stay pausable — pausing a break isn't 
 - An interrupted session is restored on the next launch, always paused
 - Every finished session is appended to a history log for later reporting
 - If any of that fails, **you are told** rather than left with silently missing data
+- A rolling local log (14-day retention) records what the app did, so a problem someone
+  reports can actually be diagnosed after the fact
 
 **Platform**
-- Menu bar shows the remaining minutes; system tray shows it on hover
+- Menu bar shows the live countdown (mm:ss, ticking every second, like the macOS
+  Stopwatch's own menu bar readout); system tray shows it on hover
+- A small always-on-top widget floats above every window for the length of a session —
+  countdown, progress and Pause/Resume/Stop — and disappears the moment the session ends
 - Launch at login (per-user; no administrator rights)
-- Light / dark / follow-system theme
+- Light / dark / follow-system theme; macOS additionally gets the system font and accent
+  colour instead of Avalonia's default Fluent look
 - Survives sleep, wake and system clock changes without losing time
 - Only one instance runs; a second launch surfaces the first
 - HiDPI aware; the window reopens on whichever monitor you're using
@@ -110,6 +117,36 @@ The script switches on the hardened runtime when a real identity is present. Not
 > **Note:** launch-at-login is only offered from a packaged `FocusFlow.app`. The agent has
 > to launch the bundle rather than the executable inside it, so there is nothing valid to
 > register under `dotnet run`. The app detects this and says so.
+
+### Packaging (Windows)
+
+Run **on Windows** — MSIX needs the Windows 10/11 SDK (`makeappx`, `signtool`), which has
+no macOS or Linux equivalent:
+
+```powershell
+.\build\windows\package.ps1 -Portable
+.\build\windows\package.ps1 -Msix -Publisher "CN=FocusFlow" -CertPath test.pfx
+```
+
+Portable is the mode that actually works today: a self-contained zip anyone can unpack and
+run, with a SmartScreen warning on first launch. An MSIX built without `-CertPath` is
+**unsigned and cannot be installed at all** — Windows refuses packages without a trusted
+signature.
+
+The portable path doesn't strictly need the script or even Windows: it's `dotnet publish`
+for `win-x64`/`win-arm64` followed by zipping the output, which the csproj's
+`EnableWindowsTargeting` makes possible from macOS or Linux too. The MSIX path cannot be
+reproduced off Windows under any circumstances.
+
+> **Building a portable zip off Windows**, e.g. from macOS, when `pwsh` isn't installed:
+> ```bash
+> dotnet publish FocusFlow.App/FocusFlow.App.csproj -c Release \
+>   -f net10.0-windows10.0.17763.0 -r win-x64 --self-contained true \
+>   -p:PublishSingleFile=false -p:DebugType=none -o dist/windows/app-x64
+> (cd dist/windows/app-x64 && zip -qr ../FocusFlow-x64-portable.zip .)
+> ```
+> This has only ever been done to confirm the publish step succeeds — nobody has run the
+> result. See [Caveats](#caveats).
 
 ---
 
@@ -171,6 +208,7 @@ Nothing leaves the machine.
 | `session.json` | The in-flight session, for crash recovery. Deleted on a clean stop. |
 | `history.jsonl` | Append-only log of finished sessions. |
 | `instance.lock` | Held by the running instance; a stale one does not block startup. |
+| `logs/focusflow-YYYY-MM-DD.log` | What the app did. Rolls over at midnight even mid-run; files older than 14 days are pruned on startup. |
 
 `history.jsonl` is [JSON Lines](https://jsonlines.org) — one self-contained object per line:
 
@@ -196,7 +234,7 @@ time spent; an immediate start-then-stop is discarded as a misclick.
 |---|---|---|
 | Tray / menu bar | Avalonia `TrayIcon` (`NSStatusItem`) | Avalonia `TrayIcon` (`Shell_NotifyIcon`) |
 | Tray surface | Native menu: readout + all actions | Same |
-| Countdown | Rendered into the icon as `25m` | Tooltip on hover |
+| Countdown | Rendered into the icon as `mm:ss`, ticking every second | Tooltip on hover |
 | Notifications | `osascript` | `ToastNotificationManagerCompat` |
 | Audio | `afplay -v` | MCI (`mciSendString`, winmm) |
 | Launch at login | `~/Library/LaunchAgents` → `open -a` the bundle | `HKCU\…\CurrentVersion\Run` |
@@ -218,7 +256,13 @@ Deliberate deviations from the obvious choices:
   offers no way to get a window from a status-item click.
 - **The menu bar countdown is drawn into the icon bitmap.** There is no Avalonia API for
   text beside a status item, but the icon is just an image. It is rendered black on
-  transparent and flagged `IsTemplateIcon` so macOS inverts it for a light or dark bar.
+  transparent and flagged `IsTemplateIcon` so macOS inverts it for a light or dark bar — the
+  same trick the macOS Stopwatch's own menu bar readout relies on.
+- **macOS gets its own accent colour and font, gated at runtime, not in shared XAML.**
+  `App.axaml.cs` overrides `SystemAccentColor` and rounds stock control corners only when
+  `OperatingSystem.IsMacOS()`. An earlier version did this as static XAML resources, which
+  applied to every platform — Windows was briefly getting Apple's system blue instead of
+  its own. Static resources can't be conditioned on the runtime OS; a code-behind check can.
 
 ### Icons
 
@@ -240,11 +284,14 @@ negative space so the mark still reads.
 
 - **Global hotkeys** — needs `RegisterHotKey` on Windows and an Accessibility-permission
   monitor on macOS.
-- **Windows packaging** — no MSIX manifest, Winget manifest or installer.
+- **Windows MSIX is scripted but unsigned and unverified**; no Winget manifest or installer.
+  The portable zip is the only path anyone has actually produced and inspected.
 - **Code signing / notarisation** on either platform.
 - **Launch minimized** — the window is shown on first launch.
-- Logging, localization, accessibility (screen reader / high contrast), auto-update.
-- No CI pipeline.
+- Localization, accessibility (screen reader / high contrast), auto-update.
+- No CI pipeline — the 107 tests only protect a change if someone remembers to run them.
+- `history.jsonl` has no rotation or cap, unlike the new log files — it will grow for as
+  long as the app is used.
 - Website blocking and cloud sync are **out of scope** for this version.
 
 ---
@@ -253,14 +300,18 @@ negative space so the mark still reads.
 
 - **The Windows runtime path has never been executed.** Everything compiles and publishes,
   but MCI audio, the Run key, toasts, `GetCursorPos` and the DPI manifest were only built
-  from macOS. Smoke-test these first on a real Windows machine.
+  from macOS. That includes the toast-notification error handling and login-item logging
+  added alongside the logging system — reasoned correctly as far as it can be checked from
+  macOS, which is a different thing from verified. Smoke-test all of this on a real Windows
+  machine before it reaches anyone else.
 - **macOS notifications are attributed to "Script Editor"**, not FocusFlow, because they go
   through `osascript`. Fixing that needs `UNUserNotifications` interop.
 - MCI's `mpegvideo` device is missing on Windows N editions without the Media Feature Pack;
   MP3 falls back to the alias beep there.
 - On a **mixed Retina / non-Retina** macOS setup, the active-monitor calculation can pick a
   neighbouring display, so the window opens on the wrong monitor. Correct when all displays
-  share a scale factor.
+  share a scale factor. The mini timer widget places itself the same way, once, the first
+  time it's shown each run.
 - The settings window is ~880 px tall with no scrollbar, so it **will not fit a 768p
   laptop**.
 - Performance targets (memory, CPU, startup) have not been measured.
@@ -271,3 +322,10 @@ negative space so the mark still reads.
 
 C# / .NET 10 · Avalonia 12.1 · CommunityToolkit.Mvvm · Microsoft.Extensions.DependencyInjection ·
 System.Text.Json · xUnit + `Microsoft.Extensions.TimeProvider.Testing`
+
+---
+
+## License
+
+[Apache License 2.0](LICENSE). Open-source dependencies and their own licenses are listed
+in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

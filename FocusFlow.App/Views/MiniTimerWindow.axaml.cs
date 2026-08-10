@@ -1,5 +1,4 @@
 using System;
-using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -50,7 +49,8 @@ public partial class MiniTimerWindow : Window
     /// <summary>Default spot: top-right of whichever screen the widget opened on.</summary>
     private void PositionTopRight()
     {
-        var screen = Screens.ScreenFromWindow(this) ?? Screens.Primary ?? Screens.All.FirstOrDefault();
+        var screen = Screens.ScreenFromWindow(this) ?? Screens.Primary
+            ?? (Screens.All.Count > 0 ? Screens.All[0] : null);
         if (screen is null)
         {
             return;

@@ -97,5 +97,7 @@ public class FileAppLoggerTests : IDisposable
         {
             Directory.Delete(_directory, recursive: true);
         }
+
+        GC.SuppressFinalize(this);
     }
 }

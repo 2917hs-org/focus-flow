@@ -92,6 +92,6 @@ public sealed class WindowPlacementService : IWindowPlacementService
             return current;
         }
 
-        return screens.Primary ?? screens.All.FirstOrDefault();
+        return screens.Primary ?? (screens.All.Count > 0 ? screens.All[0] : null);
     }
 }

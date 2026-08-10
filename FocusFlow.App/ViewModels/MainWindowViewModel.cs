@@ -554,5 +554,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _timerService.SessionEnded -= OnSessionEnded;
         _timerService.SystemResumed -= OnSystemResumed;
         _timerService.ReminderDue -= OnReminderDue;
+        GC.SuppressFinalize(this);
     }
 }
