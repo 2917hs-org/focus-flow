@@ -4,92 +4,110 @@
              RequestedThemeVariant="Default">
     <!-- "Default" ThemeVariant follows system theme variant. "Dark" or "Light" are other available options. -->
 
-    <!-- The macOS system-accent override and rounder control corners live in App.axaml.cs
-         instead of here, gated behind OperatingSystem.IsMacOS(). A <Color x:Key=…> in this
-         file applies to every platform unconditionally — Apple's blue leaking onto the
-         Windows build was a real bug, not a style choice, and it's why that reskin isn't
-         static markup. -->
-    <Application.Resources>
-        <!-- Mid-toned and saturated on purpose: each of these carries white text and has to
-             stay legible against both the light and the dark theme, so a single value per
-             role avoids maintaining two palettes. -->
-        <SolidColorBrush x:Key="FfSuccess" Color="#2E9E5B" />
-        <SolidColorBrush x:Key="FfSuccessHover" Color="#34B368" />
-        <SolidColorBrush x:Key="FfSuccessPressed" Color="#26824A" />
-
-        <SolidColorBrush x:Key="FfDanger" Color="#D93636" />
-        <SolidColorBrush x:Key="FfDangerHover" Color="#E44A4A" />
-        <SolidColorBrush x:Key="FfDangerPressed" Color="#B92B2B" />
-
-        <SolidColorBrush x:Key="FfWarning" Color="#C77700" />
-        <SolidColorBrush x:Key="FfWarningHover" Color="#DE8804" />
-        <SolidColorBrush x:Key="FfWarningPressed" Color="#A66300" />
-
-        <SolidColorBrush x:Key="FfInfo" Color="#4F46E5" />
-        <SolidColorBrush x:Key="FfInfoHover" Color="#615AEA" />
-        <SolidColorBrush x:Key="FfInfoPressed" Color="#413ACC" />
-    </Application.Resources>
+    <!-- The actual palette (Themes/MacOSPalette.axaml or Themes/WindowsPalette.axaml) is
+         merged in App.axaml.cs's Initialize(), not declared here: which one applies has to
+         be chosen at runtime by OperatingSystem.IsMacOS(), and a resource declared directly
+         in this file would apply to both platforms unconditionally regardless of which is
+         actually running. Everything below only ever references the palette's keys via
+         DynamicResource, never the colours directly, so it re-themes automatically. -->
 
     <Application.Styles>
         <FluentTheme />
+
+        <!-- Left-aligned text in TextBox/ComboBox/NumericUpDown, matching Fluent's own
+             default (and every major design system's convention for a form field):
+             centring the text was tried and reversed. It reads fine for a short fixed
+             string, but it fights the user the moment they're editing — the caret jumps
+             to the middle of the box instead of sitting after the last character typed,
+             and a ComboBox's centred closed-state text no longer lines up with its own
+             dropdown list, which renders left-aligned regardless. Nothing to override
+             here; this is the point of leaving Fluent's default alone. -->
+
+        <!-- Vertical centring is a separate, real fix, not the same request as the
+             horizontal one above: NumericUpDown's default VerticalContentAlignment leaves
+             the digits sitting at the top of the box instead of centred in it, most
+             visible on "Sessions per run" and "Remind before (min)" where the spinner
+             buttons make the box taller than the text needs. Applied to all three input
+             types for consistency, and as three separate styles rather than one combined
+             selector for the same reason as the horizontal case above: the XAML compiler
+             validates a combined selector against the group's nearest common ancestor,
+             which doesn't have this property even though every individual type does. -->
+        <Style Selector="TextBox">
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+        <Style Selector="ComboBox">
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+        <Style Selector="NumericUpDown">
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+
+        <!-- Default text colour is set per-Window (Foreground on the root element), not
+             here as a blanket "Selector=TextBlock" rule: Foreground is an inherited
+             property, so a Window-level value already cascades to every plain TextBlock
+             underneath it, including a Button's own auto-generated content TextBlock —
+             but a rule matching TextBlock directly would win over that inheritance and
+             overwrite the White the success/warning/danger/info buttons below set on
+             purpose. Inheritance gets the right answer for both cases; a type selector
+             doesn't. -->
 
         <!-- Fluent restyles the inner ContentPresenter on hover and press, so setting
              Background on the Button alone would snap back to the theme colour the moment
              the pointer arrived. Each role therefore needs all three states. -->
 
         <Style Selector="Button.success">
-            <Setter Property="Background" Value="{StaticResource FfSuccess}" />
+            <Setter Property="Background" Value="{DynamicResource PaletteSuccess}" />
             <Setter Property="Foreground" Value="White" />
             <Setter Property="BorderBrush" Value="Transparent" />
         </Style>
         <Style Selector="Button.success:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="{StaticResource FfSuccessHover}" />
+            <Setter Property="Background" Value="{DynamicResource PaletteSuccessHover}" />
             <Setter Property="Foreground" Value="White" />
         </Style>
         <Style Selector="Button.success:pressed /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="{StaticResource FfSuccessPressed}" />
+            <Setter Property="Background" Value="{DynamicResource PaletteSuccessPressed}" />
             <Setter Property="Foreground" Value="White" />
         </Style>
 
         <Style Selector="Button.danger">
-            <Setter Property="Background" Value="{StaticResource FfDanger}" />
+            <Setter Property="Background" Value="{DynamicResource PaletteError}" />
             <Setter Property="Foreground" Value="White" />
             <Setter Property="BorderBrush" Value="Transparent" />
         </Style>
         <Style Selector="Button.danger:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="{StaticResource FfDangerHover}" />
+            <Setter Property="Background" Value="{DynamicResource PaletteErrorHover}" />
             <Setter Property="Foreground" Value="White" />
         </Style>
         <Style Selector="Button.danger:pressed /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="{StaticResource FfDangerPressed}" />
+            <Setter Property="Background" Value="{DynamicResource PaletteErrorPressed}" />
             <Setter Property="Foreground" Value="White" />
         </Style>
 
         <Style Selector="Button.warning">
-            <Setter Property="Background" Value="{StaticResource FfWarning}" />
+            <Setter Property="Background" Value="{DynamicResource PaletteWarning}" />
             <Setter Property="Foreground" Value="White" />
             <Setter Property="BorderBrush" Value="Transparent" />
         </Style>
         <Style Selector="Button.warning:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="{StaticResource FfWarningHover}" />
+            <Setter Property="Background" Value="{DynamicResource PaletteWarningHover}" />
             <Setter Property="Foreground" Value="White" />
         </Style>
         <Style Selector="Button.warning:pressed /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="{StaticResource FfWarningPressed}" />
+            <Setter Property="Background" Value="{DynamicResource PaletteWarningPressed}" />
             <Setter Property="Foreground" Value="White" />
         </Style>
 
         <Style Selector="Button.info">
-            <Setter Property="Background" Value="{StaticResource FfInfo}" />
+            <Setter Property="Background" Value="{DynamicResource PalettePrimary}" />
             <Setter Property="Foreground" Value="White" />
             <Setter Property="BorderBrush" Value="Transparent" />
         </Style>
         <Style Selector="Button.info:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="{StaticResource FfInfoHover}" />
+            <Setter Property="Background" Value="{DynamicResource PalettePrimaryHover}" />
             <Setter Property="Foreground" Value="White" />
         </Style>
         <Style Selector="Button.info:pressed /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="{StaticResource FfInfoPressed}" />
+            <Setter Property="Background" Value="{DynamicResource PalettePrimaryPressed}" />
             <Setter Property="Foreground" Value="White" />
         </Style>
     </Application.Styles>

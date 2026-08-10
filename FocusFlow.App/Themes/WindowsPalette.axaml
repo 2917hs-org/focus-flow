@@ -1,0 +1,60 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    x:Class="FocusFlow.App.Themes.WindowsPalette">
+
+    <!-- Windows design tokens. Same structure and shade-computation rule as
+         Themes/MacOSPalette.axaml — see its remarks. -->
+    <ResourceDictionary.ThemeDictionaries>
+
+        <ResourceDictionary x:Key="Light">
+            <Color x:Key="SystemAccentColor">#2563EB</Color>
+
+            <SolidColorBrush x:Key="PaletteBackground" Color="#F5F7FA" />
+            <SolidColorBrush x:Key="PaletteSurface" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="PalettePrimary" Color="#2563EB" />
+            <SolidColorBrush x:Key="PalettePrimaryHover" Color="#1D4ED8" />
+            <SolidColorBrush x:Key="PalettePrimaryPressed" Color="#1944BC" />
+            <SolidColorBrush x:Key="PaletteText" Color="#111827" />
+            <SolidColorBrush x:Key="PaletteSecondary" Color="#6B7280" />
+            <SolidColorBrush x:Key="PaletteBorder" Color="#DDE2E8" />
+
+            <SolidColorBrush x:Key="PaletteSuccess" Color="#16A34A" />
+            <SolidColorBrush x:Key="PaletteSuccessHover" Color="#19B753" />
+            <SolidColorBrush x:Key="PaletteSuccessPressed" Color="#138E40" />
+
+            <SolidColorBrush x:Key="PaletteWarning" Color="#D97706" />
+            <SolidColorBrush x:Key="PaletteWarningHover" Color="#F38507" />
+            <SolidColorBrush x:Key="PaletteWarningPressed" Color="#BD6805" />
+
+            <SolidColorBrush x:Key="PaletteError" Color="#DC2626" />
+            <SolidColorBrush x:Key="PaletteErrorHover" Color="#F62B2B" />
+            <SolidColorBrush x:Key="PaletteErrorPressed" Color="#BF2121" />
+        </ResourceDictionary>
+
+        <ResourceDictionary x:Key="Dark">
+            <Color x:Key="SystemAccentColor">#60A5FA</Color>
+
+            <SolidColorBrush x:Key="PaletteBackground" Color="#111318" />
+            <SolidColorBrush x:Key="PaletteSurface" Color="#1A1D23" />
+            <SolidColorBrush x:Key="PalettePrimary" Color="#60A5FA" />
+            <SolidColorBrush x:Key="PalettePrimaryHover" Color="#3B82F6" />
+            <SolidColorBrush x:Key="PalettePrimaryPressed" Color="#3371D6" />
+            <SolidColorBrush x:Key="PaletteText" Color="#F3F4F6" />
+            <SolidColorBrush x:Key="PaletteSecondary" Color="#9CA3AF" />
+            <SolidColorBrush x:Key="PaletteBorder" Color="#30343B" />
+
+            <SolidColorBrush x:Key="PaletteSuccess" Color="#4ADE80" />
+            <SolidColorBrush x:Key="PaletteSuccessHover" Color="#53F98F" />
+            <SolidColorBrush x:Key="PaletteSuccessPressed" Color="#40C16F" />
+
+            <SolidColorBrush x:Key="PaletteWarning" Color="#FBBF24" />
+            <SolidColorBrush x:Key="PaletteWarningHover" Color="#FFD628" />
+            <SolidColorBrush x:Key="PaletteWarningPressed" Color="#DAA61F" />
+
+            <SolidColorBrush x:Key="PaletteError" Color="#F87171" />
+            <SolidColorBrush x:Key="PaletteErrorHover" Color="#FF7F7F" />
+            <SolidColorBrush x:Key="PaletteErrorPressed" Color="#D86262" />
+        </ResourceDictionary>
+
+    </ResourceDictionary.ThemeDictionaries>
+</ResourceDictionary>

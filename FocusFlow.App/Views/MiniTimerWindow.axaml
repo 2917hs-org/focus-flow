@@ -15,56 +15,63 @@
 
     <Window.Styles>
         <!-- Local to the widget rather than the shared success/warning/danger classes in
-             App.axaml — those still carry MainWindow's palette, and this widget has its
-             own. Fluent restyles the inner ContentPresenter on hover/press, so each state
-             needs its own setter or the theme colour would show through on interaction. -->
+             App.axaml: those size for MainWindow's full-height buttons, this widget needs
+             its own compact Padding/FontSize. Both draw from the same DynamicResource
+             palette keys, though, so the colours themselves stay in sync with the rest of
+             the app and with the current platform/theme. Fluent restyles the inner
+             ContentPresenter on hover/press, so each state needs its own setter or the
+             theme colour would show through on interaction. -->
         <Style Selector="Button.mini-resume">
-            <Setter Property="Background" Value="#59B292" />
+            <Setter Property="Background" Value="{DynamicResource PaletteSuccess}" />
             <Setter Property="Foreground" Value="White" />
             <Setter Property="BorderBrush" Value="Transparent" />
         </Style>
         <Style Selector="Button.mini-resume:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="#68C1A1" />
+            <Setter Property="Background" Value="{DynamicResource PaletteSuccessHover}" />
             <Setter Property="Foreground" Value="White" />
         </Style>
         <Style Selector="Button.mini-resume:pressed /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="#4AA383" />
+            <Setter Property="Background" Value="{DynamicResource PaletteSuccessPressed}" />
             <Setter Property="Foreground" Value="White" />
         </Style>
 
         <Style Selector="Button.mini-pause">
-            <Setter Property="Background" Value="#FFC94D" />
-            <Setter Property="Foreground" Value="#402D00" />
+            <Setter Property="Background" Value="{DynamicResource PaletteWarning}" />
+            <Setter Property="Foreground" Value="White" />
             <Setter Property="BorderBrush" Value="Transparent" />
         </Style>
         <Style Selector="Button.mini-pause:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="#FFD85C" />
-            <Setter Property="Foreground" Value="#402D00" />
+            <Setter Property="Background" Value="{DynamicResource PaletteWarningHover}" />
+            <Setter Property="Foreground" Value="White" />
         </Style>
         <Style Selector="Button.mini-pause:pressed /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="#F0BA3E" />
-            <Setter Property="Foreground" Value="#402D00" />
+            <Setter Property="Background" Value="{DynamicResource PaletteWarningPressed}" />
+            <Setter Property="Foreground" Value="White" />
         </Style>
 
         <Style Selector="Button.mini-stop">
-            <Setter Property="Background" Value="#FA6781" />
+            <Setter Property="Background" Value="{DynamicResource PaletteError}" />
             <Setter Property="Foreground" Value="White" />
             <Setter Property="BorderBrush" Value="Transparent" />
         </Style>
         <Style Selector="Button.mini-stop:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="#FF7690" />
+            <Setter Property="Background" Value="{DynamicResource PaletteErrorHover}" />
             <Setter Property="Foreground" Value="White" />
         </Style>
         <Style Selector="Button.mini-stop:pressed /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="#EB5872" />
+            <Setter Property="Background" Value="{DynamicResource PaletteErrorPressed}" />
             <Setter Property="Foreground" Value="White" />
         </Style>
     </Window.Styles>
 
     <!-- Its own rounded surface rather than the window chrome: WindowDecorations="None"
          gives a transparent, borderless window, so the widget has to paint its own
-         background to read as a floating card instead of stray controls on the desktop. -->
-    <Border Background="#FAE7CB"
+         background to read as a floating card instead of stray controls on the desktop.
+         PaletteSurface rather than a fixed colour: a fixed background is exactly what left
+         the earlier hardcoded black StatusText illegible the moment the OS switched to
+         dark mode, since nothing else adapted with it. Surface + Text both come from the
+         same palette now, so they can't drift out of sync with each other again. -->
+    <Border Background="{DynamicResource PaletteSurface}"
             CornerRadius="12"
             Padding="12,9"
             BoxShadow="0 6 20 0 #40000000">
@@ -82,8 +89,7 @@
                            HorizontalAlignment="Center" />
                 <TextBlock Text="{Binding StatusText}"
                            FontSize="10"
-                           Foreground="Black"
-                           Opacity="0.7"
+                           Foreground="{DynamicResource PaletteSecondary}"
                            HorizontalAlignment="Center"
                            TextTrimming="CharacterEllipsis" />
             </StackPanel>

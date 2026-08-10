@@ -34,11 +34,11 @@ started — see [Not implemented](#not-implemented).
 - **Infinite mode**, or a finite run of 1–10 sessions
 - Auto-start the next break and/or study session, configurable independently
 
-**Focus discipline**
-
-There is deliberately **no Pause during a study session**. Starting one is a commitment,
-and an easy Pause is what erodes it. Stop remains the way out and is recorded in the
-history as an abandoned session. Breaks stay pausable — pausing a break isn't a lapse.
+**Pause**
+- Available the moment any session is running, study or break
+- A paused study session still shows in history as `Stopped` if you end it rather than
+  resume it — pausing doesn't change how the outcome is recorded, only whether the clock
+  is moving
 
 **Alerts**
 - A configurable **reminder before a session ends** (1–10 minutes), which stands in for

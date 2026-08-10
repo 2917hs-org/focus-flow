@@ -1,29 +1,43 @@
+using Avalonia.Controls;
 using Avalonia.Media;
 
 namespace FocusFlow.App.ViewModels;
 
 /// <summary>
-/// Colours for the current timer mode, matching the semantic button roles in App.axaml.
+/// Colours for the current timer mode, drawn from the active platform/theme palette
+/// (Themes/MacOSPalette.axaml or Themes/WindowsPalette.axaml) rather than fixed hex values.
 /// </summary>
 /// <remarks>
-/// Frozen singletons rather than new brushes per tick: <see cref="MainWindowViewModel"/>
-/// reassigns this once a second, and allocating a brush each time would churn for no
-/// reason.
+/// Resolved once, on first access, via <c>Avalonia.Application.Current.TryFindResource</c> rather
+/// than bound as a live DynamicResource in XAML: <see cref="MainWindowViewModel"/> assigns
+/// this as a plain C# <see cref="IBrush"/> property once a second from code, not from a
+/// XAML binding path a DynamicResource could hook into. That first access happens after
+/// <c>App.Initialize()</c> has already merged the palette into <c>Application.Resources</c>
+/// — MainWindowViewModel is constructed from the DI container in
+/// <c>OnFrameworkInitializationCompleted</c>, which always runs after <c>Initialize()</c> —
+/// so the resource is there by the time anything asks for it. The one real limitation this
+/// carries: a live OS theme switch while "System" is selected and the app is already
+/// running won't re-resolve these particular colours until restart, unlike everything
+/// still wired through DynamicResource in XAML.
 /// </remarks>
 internal static class ModeBrushes
 {
-    public static readonly IBrush Study = Freeze(Color.FromRgb(0x59, 0xB2, 0x92));
+    public static readonly IBrush Study = Resolve("PalettePrimary");
 
-    public static readonly IBrush Break = Freeze(Color.FromRgb(0xFF, 0xC9, 0x4D));
+    public static readonly IBrush Break = Resolve("PaletteSuccess");
 
-    public static readonly IBrush Paused = Freeze(Color.FromRgb(0xFA, 0x67, 0x81));
+    public static readonly IBrush Paused = Resolve("PaletteWarning");
 
-    /// <summary>Deliberately grey — nothing is running, so nothing should draw the eye.</summary>
-    public static readonly IBrush Idle = Freeze(Color.FromRgb(0x80, 0x80, 0x80));
+    /// <summary>Deliberately muted — nothing is running, so nothing should draw the eye.</summary>
+    public static readonly IBrush Idle = Resolve("PaletteSecondary");
 
-    private static IBrush Freeze(Color color)
+    private static IBrush Resolve(string key)
     {
-        var brush = new SolidColorBrush(color);
-        return brush.ToImmutable();
+        if (Avalonia.Application.Current?.TryFindResource(key, out var value) == true && value is IBrush brush)
+        {
+            return brush;
+        }
+
+        return new SolidColorBrush(Colors.Gray).ToImmutable();
     }
 }

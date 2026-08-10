@@ -48,12 +48,7 @@ public sealed class TrayService : ITrayService, IDisposable
 
     private readonly TrayIcon _trayIcon;
     private readonly WindowIcon _staticIcon;
-
-    /// <summary>Bitmap currently displayed as the icon, kept so it can be released.</summary>
-    private RenderTargetBitmap? _renderedIcon;
-
-    /// <summary>Text the current icon shows, so it is only redrawn when the second flips.</summary>
-    private string? _renderedText;
+    private readonly IMenuBarCountdown _countdown;
 
     private readonly NativeMenuItem _statusItem;
     private readonly NativeMenuItem _startItem;
@@ -65,8 +60,10 @@ public sealed class TrayService : ITrayService, IDisposable
     private readonly NativeMenuItem _resetItem;
     private readonly NativeMenuItem _stopItem;
 
-    public TrayService()
+    public TrayService(IMenuBarCountdown countdown)
     {
+        _countdown = countdown;
+
         // Disabled on purpose: a readout, not an action.
         _statusItem = new NativeMenuItem("FocusFlow") { IsEnabled = false };
 
@@ -152,7 +149,13 @@ public sealed class TrayService : ITrayService, IDisposable
         _trayIcon.ToolTipText = $"FocusFlow — {status.Time}";
         _statusItem.Header = $"{status.Time}  ·  {status.Status}";
 
-        UpdateIcon(status);
+        // A no-op on Windows — see NoopMenuBarCountdown. On macOS this is the countdown
+        // itself: real menu bar text, sized by AppKit, not a bitmap rendered into the icon.
+        _countdown.SetVisible(status.CanStop);
+        if (status.CanStop && status.IconLabel is not null)
+        {
+            _countdown.SetText(status.IconLabel);
+        }
 
         // Hidden rather than greyed: a Pause entry that is permanently unavailable during
         // a study session would dangle the very option the design removes.
@@ -164,47 +167,6 @@ public sealed class TrayService : ITrayService, IDisposable
         _skipItem.IsVisible = status.CanSkip;
         _resetItem.IsVisible = status.CanReset;
         _stopItem.IsVisible = status.CanStop;
-    }
-
-    /// <summary>
-    /// Shows the countdown as the icon itself while a session runs, falling back to the
-    /// logo when idle.
-    /// </summary>
-    /// <remarks>
-    /// macOS only. A Windows tray icon is a small fixed square, so a wide text bitmap would
-    /// be squashed into something unreadable; there the tooltip carries the time.
-    /// </remarks>
-    private void UpdateIcon(TrayStatus status)
-    {
-        if (!OperatingSystem.IsMacOS())
-        {
-            return;
-        }
-
-        var text = status.CanStop ? status.IconLabel : null;
-
-        if (text == _renderedText)
-        {
-            return;
-        }
-
-        _renderedText = text;
-        var previous = _renderedIcon;
-
-        if (text is null)
-        {
-            _renderedIcon = null;
-            _trayIcon.Icon = _staticIcon;
-        }
-        else
-        {
-            _renderedIcon = TrayIconRenderer.Render(text);
-            _trayIcon.Icon = new WindowIcon(_renderedIcon);
-        }
-
-        // Released only after the replacement is in place — the tray still holds a
-        // reference to the old bitmap until then.
-        previous?.Dispose();
     }
 
     private NativeMenuItem PredefinedAction(string header, int minutes)
@@ -241,6 +203,10 @@ public sealed class TrayService : ITrayService, IDisposable
     {
         _trayIcon.IsVisible = false;
         _trayIcon.Dispose();
-        _renderedIcon?.Dispose();
+
+        // _countdown is constructor-injected, not owned here — it's registered as its own
+        // DI singleton, so the container disposes the real NSStatusItem when the
+        // ServiceProvider itself is disposed. Disposing a dependency this class didn't
+        // create would risk the container disposing it a second time.
     }
 }

@@ -7,10 +7,12 @@
         SizeToContent="Height"
         CanResize="False"
         ShowInTaskbar="False"
-        WindowStartupLocation="CenterScreen">
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource PaletteBackground}"
+        Foreground="{DynamicResource PaletteText}">
     <StackPanel Margin="24" Spacing="16">
         <TextBlock x:Name="HeadingText" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" />
-        <TextBlock x:Name="BodyText" TextWrapping="Wrap" Opacity="0.85" />
+        <TextBlock x:Name="BodyText" TextWrapping="Wrap" Foreground="{DynamicResource PaletteSecondary}" />
 
         <StackPanel x:Name="ActionPanel" Orientation="Horizontal"
                     HorizontalAlignment="Right" Spacing="8">

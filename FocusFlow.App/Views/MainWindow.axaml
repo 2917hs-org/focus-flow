@@ -8,7 +8,9 @@
         Width="420"
         SizeToContent="Height"
         MinWidth="400"
-        MinHeight="200">
+        MinHeight="200"
+        Background="{DynamicResource PaletteBackground}"
+        Foreground="{DynamicResource PaletteText}">
 
     <Window.Styles>
         <!-- Sized so the widest combination — Start, Break, Resume, Skip, Reset, Stop —
@@ -29,12 +31,13 @@
                        Foreground="{Binding ModeBrush}"
                        HorizontalAlignment="Center" />
             <TextBlock Text="{Binding StatusText}"
-                       Opacity="0.7"
+                       Foreground="{DynamicResource PaletteSecondary}"
                        HorizontalAlignment="Center" />
         </StackPanel>
 
         <TextBlock Text="{Binding TodaySummary}"
-                   HorizontalAlignment="Center" FontSize="12" Opacity="0.65"
+                   Foreground="{DynamicResource PaletteSecondary}"
+                   HorizontalAlignment="Center" FontSize="12"
                    TextWrapping="Wrap" TextAlignment="Center" />
 
         <!-- Transport -->
@@ -58,19 +61,23 @@
             <TextBlock Text="Sessions" FontWeight="SemiBold" />
 
             <!-- Paired on one row: two full-width spinners stacked took far more
-                 vertical space than two numbers warrant. -->
+                 vertical space than two numbers warrant. Editable combo boxes rather than
+                 NumericUpDown: a dropdown of common lengths for the one-click case, but
+                 still a plain text box underneath for any other value up to the cap. -->
             <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
                 <StackPanel Grid.Column="0" Spacing="4">
-                    <TextBlock Text="Focus (min)" />
-                    <NumericUpDown Value="{Binding StudyDuration, Mode=TwoWay}"
-                                   Minimum="1" Maximum="120" Increment="5" FormatString="0"
-                                   HorizontalAlignment="Stretch" />
+                    <TextBlock Text="Focus (min, up to 120)" />
+                    <ComboBox IsEditable="True"
+                              ItemsSource="{Binding FocusDurationPresets}"
+                              Text="{Binding StudyDuration, Mode=TwoWay}"
+                              HorizontalAlignment="Stretch" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Spacing="4">
-                    <TextBlock Text="Break (min)" />
-                    <NumericUpDown Value="{Binding BreakDuration, Mode=TwoWay}"
-                                   Minimum="1" Maximum="60" Increment="1" FormatString="0"
-                                   HorizontalAlignment="Stretch" />
+                    <TextBlock Text="Break (min, up to 60)" />
+                    <ComboBox IsEditable="True"
+                              ItemsSource="{Binding BreakDurationPresets}"
+                              Text="{Binding BreakDuration, Mode=TwoWay}"
+                              HorizontalAlignment="Stretch" />
                 </StackPanel>
             </Grid>
 
@@ -126,8 +133,20 @@
 
             <StackPanel Spacing="4">
                 <TextBlock Text="{Binding AlarmVolume, StringFormat='Volume: {0}%'}" />
+                <!-- Fluent reserves ~50px of vertical space for a horizontal Slider
+                     regardless of Padding/MinHeight, most of it empty padding around the
+                     thumb rather than anything visible. Constraining Height to crop that
+                     padding was tried first and reverted: a headless Avalonia probe showed
+                     the thumb's own *layout* bounds fitting inside a shorter box, but the
+                     probe measures logical layout, not render-time clipping — in the real
+                     app the thumb's circle was visibly cut off by exactly that Height
+                     constraint. A negative Margin is a different, safer mechanism: it
+                     repositions the whole already-correctly-rendered control rather than
+                     resizing it, so nothing about the Slider's own internal template
+                     rendering is touched, which is what actually caused the clipping. -->
                 <Slider Value="{Binding AlarmVolume, Mode=TwoWay}"
-                        Minimum="0" Maximum="100" TickFrequency="10" IsSnapToTickEnabled="True" />
+                        Minimum="0" Maximum="100" TickFrequency="10" IsSnapToTickEnabled="True"
+                        Margin="0,-14,0,-14" />
             </StackPanel>
 
             <CheckBox Content="Play music when a break ends"
@@ -156,10 +175,12 @@
             </Grid>
             <TextBlock Text="{Binding StartupWarning}"
                        IsVisible="{Binding StartupWarning, Converter={x:Static ObjectConverters.IsNotNull}}"
-                       FontSize="11" Opacity="0.75" TextWrapping="Wrap" />
+                       Foreground="{DynamicResource PaletteSecondary}"
+                       FontSize="11" TextWrapping="Wrap" />
         </StackPanel>
 
         <TextBlock Text="Closing this window keeps FocusFlow running in the tray."
-                   FontSize="11" Opacity="0.6" TextWrapping="Wrap" />
+                   Foreground="{DynamicResource PaletteSecondary}"
+                   FontSize="11" TextWrapping="Wrap" />
     </StackPanel>
 </Window>

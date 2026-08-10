@@ -1,0 +1,63 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    x:Class="FocusFlow.App.Themes.MacOSPalette">
+
+    <!-- macOS design tokens. Hover/pressed shades for Success/Warning/Error are computed
+         (+12%/-13% per channel) since only a single value was specified for those roles;
+         Primary's hover was given directly, and its pressed shade is the same -13% step
+         applied on top of that. Consumed as DynamicResource everywhere so Avalonia
+         re-resolves automatically when ActualThemeVariant flips between Light and Dark. -->
+    <ResourceDictionary.ThemeDictionaries>
+
+        <ResourceDictionary x:Key="Light">
+            <Color x:Key="SystemAccentColor">#5B5FEF</Color>
+
+            <SolidColorBrush x:Key="PaletteBackground" Color="#F5F7FA" />
+            <SolidColorBrush x:Key="PaletteSurface" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="PalettePrimary" Color="#5B5FEF" />
+            <SolidColorBrush x:Key="PalettePrimaryHover" Color="#4B4FD6" />
+            <SolidColorBrush x:Key="PalettePrimaryPressed" Color="#4145BA" />
+            <SolidColorBrush x:Key="PaletteText" Color="#17181C" />
+            <SolidColorBrush x:Key="PaletteSecondary" Color="#6B7280" />
+            <SolidColorBrush x:Key="PaletteBorder" Color="#E5E7EB" />
+
+            <SolidColorBrush x:Key="PaletteSuccess" Color="#22C55E" />
+            <SolidColorBrush x:Key="PaletteSuccessHover" Color="#26DD69" />
+            <SolidColorBrush x:Key="PaletteSuccessPressed" Color="#1EAB52" />
+
+            <SolidColorBrush x:Key="PaletteWarning" Color="#F59E0B" />
+            <SolidColorBrush x:Key="PaletteWarningHover" Color="#FFB10C" />
+            <SolidColorBrush x:Key="PaletteWarningPressed" Color="#D5890A" />
+
+            <SolidColorBrush x:Key="PaletteError" Color="#EF4444" />
+            <SolidColorBrush x:Key="PaletteErrorHover" Color="#FF4C4C" />
+            <SolidColorBrush x:Key="PaletteErrorPressed" Color="#D03B3B" />
+        </ResourceDictionary>
+
+        <ResourceDictionary x:Key="Dark">
+            <Color x:Key="SystemAccentColor">#8B8FFF</Color>
+
+            <SolidColorBrush x:Key="PaletteBackground" Color="#0D1117" />
+            <SolidColorBrush x:Key="PaletteSurface" Color="#161B22" />
+            <SolidColorBrush x:Key="PalettePrimary" Color="#8B8FFF" />
+            <SolidColorBrush x:Key="PalettePrimaryHover" Color="#7074F5" />
+            <SolidColorBrush x:Key="PalettePrimaryPressed" Color="#6165D5" />
+            <SolidColorBrush x:Key="PaletteText" Color="#F5F7FA" />
+            <SolidColorBrush x:Key="PaletteSecondary" Color="#9CA3AF" />
+            <SolidColorBrush x:Key="PaletteBorder" Color="#2A3038" />
+
+            <SolidColorBrush x:Key="PaletteSuccess" Color="#34D399" />
+            <SolidColorBrush x:Key="PaletteSuccessHover" Color="#3AECAB" />
+            <SolidColorBrush x:Key="PaletteSuccessPressed" Color="#2DB885" />
+
+            <SolidColorBrush x:Key="PaletteWarning" Color="#FBBF24" />
+            <SolidColorBrush x:Key="PaletteWarningHover" Color="#FFD628" />
+            <SolidColorBrush x:Key="PaletteWarningPressed" Color="#DAA61F" />
+
+            <SolidColorBrush x:Key="PaletteError" Color="#F87171" />
+            <SolidColorBrush x:Key="PaletteErrorHover" Color="#FF7F7F" />
+            <SolidColorBrush x:Key="PaletteErrorPressed" Color="#D86262" />
+        </ResourceDictionary>
+
+    </ResourceDictionary.ThemeDictionaries>
+</ResourceDictionary>

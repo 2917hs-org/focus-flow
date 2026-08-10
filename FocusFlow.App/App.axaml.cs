@@ -3,7 +3,6 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
-using Avalonia.Media;
 using Avalonia.Styling;
 using FocusFlow.App.Services;
 using FocusFlow.App.ViewModels;
@@ -38,9 +37,16 @@ public partial class App : Avalonia.Application
     {
         AvaloniaXamlLoader.Load(this);
 
-        // Static XAML resources apply to every platform unconditionally — a
-        // <Color x:Key="SystemAccentColor"> in App.axaml would put Apple's blue on the
-        // Windows build too, which is a bug, not a native look. Gating it here instead.
+        // Each platform gets its own full Light/Dark palette — merged here rather than
+        // declared as static resources in App.axaml, because a plain <Color x:Key="…">
+        // there would apply to every platform unconditionally regardless of which one is
+        // actually running. Both dictionaries declare Light/Dark ThemeDictionaries, so
+        // DynamicResource lookups everywhere else re-resolve automatically when
+        // ActualThemeVariant flips — nothing downstream needs to know which platform it's
+        // on.
+        Resources.MergedDictionaries.Add(
+            OperatingSystem.IsMacOS() ? new Themes.MacOSPalette() : new Themes.WindowsPalette());
+
         if (OperatingSystem.IsMacOS())
         {
             ApplyMacOSStyling();
@@ -48,21 +54,12 @@ public partial class App : Avalonia.Application
     }
 
     /// <summary>
-    /// Retints FluentTheme's stock controls with macOS's system blue instead of its own,
-    /// and rounds the stock input controls' corners closer to macOS's than Fluent's
-    /// default 4px. The semantic success/warning/danger/info buttons in App.axaml already
-    /// set their own look and are untouched by either.
+    /// Rounds the stock input controls' corners closer to macOS's than Fluent's default
+    /// 4px. The semantic success/warning/danger/info buttons in App.axaml set their own
+    /// look and are untouched by this.
     /// </summary>
     private void ApplyMacOSStyling()
     {
-        Resources["SystemAccentColor"] = Color.Parse("#007AFF");
-        Resources["SystemAccentColorLight1"] = Color.Parse("#2694FF");
-        Resources["SystemAccentColorLight2"] = Color.Parse("#4DABFF");
-        Resources["SystemAccentColorLight3"] = Color.Parse("#73C1FF");
-        Resources["SystemAccentColorDark1"] = Color.Parse("#0068D9");
-        Resources["SystemAccentColorDark2"] = Color.Parse("#0055B2");
-        Resources["SystemAccentColorDark3"] = Color.Parse("#00438C");
-
         Styles.Add(RoundedCorners<Button>());
         Styles.Add(RoundedCorners<ComboBox>());
         Styles.Add(RoundedCorners<TextBox>());
@@ -299,11 +296,13 @@ public partial class App : Avalonia.Application
         services.AddSingleton<IAudioPlayer, WindowsAudioPlayer>();
         services.AddSingleton<IStartupService, WindowsStartupService>();
         services.AddSingleton<IPointerLocator, WindowsPointerLocator>();
+        services.AddSingleton<IMenuBarCountdown, NoopMenuBarCountdown>();
 #else
         services.AddSingleton<INotificationService, MacNotificationService>();
         services.AddSingleton<IAudioPlayer, MacAudioPlayer>();
         services.AddSingleton<IStartupService, MacStartupService>();
         services.AddSingleton<IPointerLocator, MacPointerLocator>();
+        services.AddSingleton<IMenuBarCountdown, NativeMenuBarCountdown>();
 #endif
 
         services.AddSingleton<MainWindowViewModel>();
