@@ -138,7 +138,8 @@ public sealed class SettingsService : ISettingsService, IDisposable
         && a.BreakDuration == b.BreakDuration
         && a.AutoStartBreak == b.AutoStartBreak
         && a.AutoStartStudy == b.AutoStartStudy
-        && a.AlarmSoundPath == b.AlarmSoundPath;
+        && a.AlarmSoundPath == b.AlarmSoundPath
+        && a.BlockedAppIds.SequenceEqual(b.BlockedAppIds, StringComparer.OrdinalIgnoreCase);
 
     public void Dispose()
     {

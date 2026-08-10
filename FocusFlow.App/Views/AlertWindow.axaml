@@ -16,8 +16,8 @@
 
         <StackPanel x:Name="ActionPanel" Orientation="Horizontal"
                     HorizontalAlignment="Right" Spacing="8">
-            <Button x:Name="SecondaryButton" Content="Not now" IsVisible="False" />
-            <Button x:Name="PrimaryButton" Content="OK" IsDefault="True" />
+            <Button x:Name="SecondaryButton" Classes="secondary" Content="Not now" IsVisible="False" />
+            <Button x:Name="PrimaryButton" Classes="info" Content="OK" IsDefault="True" />
         </StackPanel>
     </StackPanel>
 </Window>

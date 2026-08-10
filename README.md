@@ -62,6 +62,10 @@ started — see [Not implemented](#not-implemented).
 - A small always-on-top widget floats above every window for the length of a session —
   countdown, progress and Pause/Resume/Stop — and disappears the moment the session ends
 - Launch at login (per-user; no administrator rights)
+- **App blocking (macOS only)** — pick apps in Settings; if one comes to the foreground
+  during an active, unpaused session it's hidden and FocusFlow is brought forward. Never
+  force-quits anything. Requires Accessibility permission — see
+  [Packaging (macOS)](#packaging-macos)
 - Light / dark / follow-system theme; macOS additionally gets the system font and accent
   colour instead of Avalonia's default Fluent look
 - Survives sleep, wake and system clock changes without losing time
@@ -117,6 +121,11 @@ The script switches on the hardened runtime when a real identity is present. Not
 > **Note:** launch-at-login is only offered from a packaged `FocusFlow.app`. The agent has
 > to launch the bundle rather than the executable inside it, so there is nothing valid to
 > register under `dotnet run`. The app detects this and says so.
+
+> **Note:** app blocking needs Accessibility permission
+> (System Settings → Privacy & Security → Accessibility). Without it, blocking is reported
+> as unsupported — Settings shows why and links straight to that pane — rather than
+> silently doing nothing or crashing.
 
 ### Packaging (Windows)
 
@@ -240,6 +249,7 @@ time spent; an immediate start-then-stop is discarded as a misclick.
 | Launch at login | `~/Library/LaunchAgents` → `open -a` the bundle | `HKCU\…\CurrentVersion\Run` |
 | Pointer position | CoreGraphics `CGEventGetLocation` | `GetCursorPos` |
 | Sleep detection | Poll-gap heuristic (shared) | Poll-gap heuristic (shared) |
+| App blocking | Polls `NSWorkspace.frontmostApplication` (~500ms); hides the match and activates FocusFlow via `objc_msgSend`. Gated on `AXIsProcessTrusted` | Not implemented — no-op |
 
 Deliberate deviations from the obvious choices:
 
@@ -258,6 +268,13 @@ Deliberate deviations from the obvious choices:
   text beside a status item, but the icon is just an image. It is rendered black on
   transparent and flagged `IsTemplateIcon` so macOS inverts it for a light or dark bar — the
   same trick the macOS Stopwatch's own menu bar readout relies on.
+- **App blocking polls the frontmost app instead of observing
+  `NSWorkspace.didActivateApplicationNotification`.** True notification-based observation
+  needs an Objective-C block callback — constructing the block ABI struct, a native
+  function pointer, `_Block_copy` — which nothing else here uses; every other native call
+  is a synchronous `objc_msgSend`. A ~500ms poll reuses that same technique with no new
+  interop primitive, at a latency nobody will notice for hiding an app someone just
+  switched to.
 - **macOS gets its own accent colour and font, gated at runtime, not in shared XAML.**
   `App.axaml.cs` overrides `SystemAccentColor` and rounds stock control corners only when
   `OperatingSystem.IsMacOS()`. An earlier version did this as static XAML resources, which
@@ -292,7 +309,15 @@ negative space so the mark still reads.
 - No CI pipeline — the 107 tests only protect a change if someone remembers to run them.
 - `history.jsonl` has no rotation or cap, unlike the new log files — it will grow for as
   long as the app is used.
-- Website blocking and cloud sync are **out of scope** for this version.
+- **App blocking is Windows-only unimplemented** (macOS is done — see
+  [Platform implementations](#platform-implementations)); `IAppBlockingMonitor` is a
+  no-op there for now.
+- **Website blocking** — out of scope for this version. Reliably blocking specific sites
+  (not just apps) needs a privileged helper tool gated on code signing with a real
+  Developer ID, which this project doesn't have yet (see
+  [Packaging (macOS)](#packaging-macos)). Shelling out to `sudo` as a stopgap was
+  considered and rejected — it's unreliable on recent macOS and not worth building on.
+- Cloud sync is **out of scope** for this version.
 
 ---
 

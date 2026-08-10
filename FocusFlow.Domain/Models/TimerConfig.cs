@@ -86,6 +86,12 @@ public class TimerConfig
     /// <summary>FR-015.</summary>
     public AppTheme Theme { get; set; } = AppTheme.System;
 
+    /// <summary>
+    /// Bundle identifiers of apps to hide/foreground-intervene on while a session is
+    /// running and unpaused. macOS only — see IAppBlockingMonitor.IsSupported.
+    /// </summary>
+    public List<string> BlockedAppIds { get; set; } = [];
+
     public TimerConfig Clone() => new()
     {
         SchemaVersion = SchemaVersion,
@@ -102,7 +108,8 @@ public class TimerConfig
         LaunchOnStartup = LaunchOnStartup,
         ReminderEnabled = ReminderEnabled,
         ReminderLeadTime = ReminderLeadTime,
-        Theme = Theme
+        Theme = Theme,
+        BlockedAppIds = [..BlockedAppIds]
     };
 
     /// <summary>
@@ -146,6 +153,12 @@ public class TimerConfig
         {
             clone.SchemaVersion = CurrentSchemaVersion;
         }
+
+        clone.BlockedAppIds = clone.BlockedAppIds
+            .Select(id => id.Trim())
+            .Where(id => id.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
         return clone;
     }

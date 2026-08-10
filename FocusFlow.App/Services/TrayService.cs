@@ -66,18 +66,23 @@ public sealed class TrayService : ITrayService, IDisposable
         // Disabled on purpose: a readout, not an action.
         _statusItem = new NativeMenuItem("FocusFlow") { IsEnabled = false };
 
-        _breakItem = Action("Take a Break", () => StartBreakRequested);
-        _pauseItem = Action("Pause", () => PauseRequested);
-        _resumeItem = Action("Resume", () => ResumeRequested);
-        _skipItem = Action("Skip", () => SkipRequested);
-        _resetItem = Action("Reset", () => ResetRequested);
-        _stopItem = Action("Stop", () => StopRequested);
+        // Prefixed with a plain Unicode glyph rather than NativeMenuItem.Icon (a Bitmap):
+        // that needs a real per-action image asset. Picked from Geometric Shapes/Dingbats
+        // rather than colour emoji, and ︎ (the "render as text, not emoji" variation
+        // selector) is appended to every glyph capable of both — a thin monochrome sketch
+        // like Safari's own menu icons, not a colourful pictograph.
+        _breakItem = Action("☕︎  Take a Break", () => StartBreakRequested);
+        _pauseItem = Action("⏸︎  Pause", () => PauseRequested);
+        _resumeItem = Action("▶︎  Resume", () => ResumeRequested);
+        _skipItem = Action("⏭︎  Skip", () => SkipRequested);
+        _resetItem = Action("↺  Reset", () => ResetRequested);
+        _stopItem = Action("⏹︎  Stop", () => StopRequested);
 
         // No bare "Start" item: it would start whatever length is currently saved in
         // settings, with no way to tell from the tray what that length actually is. The
         // labelled options below and "Open Main Window" (where the length is visible) are
         // the two ways to start without guessing.
-        _predefinedItem = new NativeMenuItem("Focus Session")
+        _predefinedItem = new NativeMenuItem("◎  Focus Session")
         {
             Menu = new NativeMenu
             {
@@ -88,14 +93,49 @@ public sealed class TrayService : ITrayService, IDisposable
             }
         };
 
-        var open = new NativeMenuItem("Open Main Window");
+        var open = new NativeMenuItem("⚙︎  Open Main Window");
         open.Click += (_, _) => OpenRequested?.Invoke(this, EventArgs.Empty);
 
-        var history = new NativeMenuItem("View History");
+        var history = new NativeMenuItem("▤  View History");
         history.Click += (_, _) => ShowHistoryRequested?.Invoke(this, EventArgs.Empty);
 
-        var quit = new NativeMenuItem("Quit");
+        var quit = new NativeMenuItem("✕  Quit");
         quit.Click += (_, _) => Shutdown();
+
+        var menu = new NativeMenu
+        {
+            _statusItem,
+            new NativeMenuItemSeparator(),
+            _predefinedItem,
+            _breakItem,
+            _pauseItem,
+            _resumeItem,
+            _skipItem,
+            _resetItem,
+            _stopItem
+        };
+
+        // macOS only, and built here rather than added-then-hidden: app blocking's
+        // IAppBlockingMonitor is a no-op on Windows, so GetFrontmostApp() there would
+        // always return null and the item would just sit in the menu doing nothing —
+        // worse than not offering it. Quick-add rather than requiring the whole Manage
+        // Blocked Apps window for "block the thing I'm looking at right now." Works from
+        // the tray without stealing focus: a status-item menu doesn't activate its owning
+        // app, so whatever's still frontmost when this is clicked is genuinely the app the
+        // user was just in, not FocusFlow itself.
+        if (OperatingSystem.IsMacOS())
+        {
+            var blockFrontmost = new NativeMenuItem("⊘  Block Frontmost App");
+            blockFrontmost.Click += (_, _) => BlockFrontmostAppRequested?.Invoke(this, EventArgs.Empty);
+
+            menu.Add(new NativeMenuItemSeparator());
+            menu.Add(blockFrontmost);
+        }
+
+        menu.Add(new NativeMenuItemSeparator());
+        menu.Add(open);
+        menu.Add(history);
+        menu.Add(quit);
 
         _staticIcon = new WindowIcon(new Bitmap(AssetLoader.Open(IdleIconUri)));
 
@@ -104,22 +144,7 @@ public sealed class TrayService : ITrayService, IDisposable
             Icon = _staticIcon,
             ToolTipText = "FocusFlow",
             IsVisible = true,
-            Menu = new NativeMenu
-            {
-                _statusItem,
-                new NativeMenuItemSeparator(),
-                _predefinedItem,
-                _breakItem,
-                _pauseItem,
-                _resumeItem,
-                _skipItem,
-                _resetItem,
-                _stopItem,
-                new NativeMenuItemSeparator(),
-                open,
-                history,
-                quit
-            }
+            Menu = menu
         };
 
         // Windows raises this on left-click, and with the window hidden to the tray it is
@@ -140,6 +165,9 @@ public sealed class TrayService : ITrayService, IDisposable
     public event EventHandler? SkipRequested;
     public event EventHandler? ResetRequested;
     public event EventHandler? StopRequested;
+
+    /// <summary>"Block Frontmost App" chosen — block whatever app was frontmost when clicked.</summary>
+    public event EventHandler? BlockFrontmostAppRequested;
 
     /// <summary>"Open Main Window" chosen — show the full settings window.</summary>
     public event EventHandler? OpenRequested;

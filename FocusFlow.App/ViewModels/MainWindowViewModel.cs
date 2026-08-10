@@ -27,6 +27,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly IStartupService _startupService;
     private readonly IFilePickerService _filePicker;
     private readonly SessionHistoryService _history;
+    private readonly IAppBlockingService _appBlocking;
 
     /// <summary>
     /// Raised for things the user must actually see. App owns the window; the ViewModel
@@ -37,6 +38,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     /// <summary>"View History" chosen — show the session history window. Same reasoning
     /// as <see cref="AlertRequested"/>: App owns the window, not the ViewModel.</summary>
     public event EventHandler? ShowHistoryRequested;
+
+    /// <summary>"Manage Blocked Apps…" chosen — show the blocked-apps window. Same
+    /// reasoning as <see cref="ShowHistoryRequested"/>.</summary>
+    public event EventHandler? ShowBlockedAppsRequested;
 
     /// <summary>
     /// Set while pushing stored settings into the bound properties, so the resulting
@@ -64,6 +69,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string _currentTime = "25:00";
     [ObservableProperty] private string _statusText = "Ready";
     [ObservableProperty] private string? _startupWarning;
+    [ObservableProperty] private string? _appBlockingWarning;
+    [ObservableProperty] private int _blockedAppCount;
 
     /// <summary>
     /// Colours the countdown and progress bar by what is running, so the mode is readable
@@ -80,7 +87,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         ISettingsService settings,
         IStartupService startupService,
         IFilePickerService filePicker,
-        SessionHistoryService history)
+        SessionHistoryService history,
+        IAppBlockingService appBlocking)
     {
         _timerService = timerService;
         _notificationService = notificationService;
@@ -90,15 +98,22 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _startupService = startupService;
         _filePicker = filePicker;
         _history = history;
+        _appBlocking = appBlocking;
 
         AvailableSounds = new ObservableCollection<AlarmSound>(audioPlayer.AvailableSounds);
 
         LoadFromSettings();
+        RefreshAppBlockingSupport();
+        BlockedAppCount = _settings.Current.BlockedAppIds.Count;
 
         _timerService.TimerUpdated += OnTimerUpdated;
         _timerService.SessionEnded += OnSessionEnded;
         _timerService.SystemResumed += OnSystemResumed;
         _timerService.ReminderDue += OnReminderDue;
+
+        // BlockedAppsWindow (and the tray's quick-add) can change the list independently of
+        // this ViewModel, so the count is read fresh from settings rather than owned here.
+        _settings.Changed += OnSettingsChanged;
 
         Apply(_timerService.CurrentState);
         RefreshTodaySummary();
@@ -116,6 +131,26 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     public IReadOnlyList<int> BreakDurationPresets { get; } = [5, 10, 15, 20, 30, 45, 60];
 
     public bool IsStartupSupported => _startupService.IsSupported;
+
+    /// <summary>
+    /// Same UX shape as <see cref="IsStartupSupported"/> — false means macOS Accessibility
+    /// access hasn't been granted, not a silent no-op. Unlike IsStartupSupported this can
+    /// flip while the app is running (the user can grant it mid-session), so App re-checks
+    /// it via <see cref="RefreshAppBlockingSupport"/> whenever the window is activated.
+    /// </summary>
+    public bool IsAppBlockingSupported => _appBlocking.IsSupported;
+
+    /// <summary>
+    /// So the count is visible without opening the manager — otherwise the only way to
+    /// know "did I actually block anything" is to open a second window and check.
+    /// </summary>
+    public string ManageBlockedAppsLabel =>
+        BlockedAppCount > 0 ? $"Manage Blocked Apps ({BlockedAppCount})…" : "Manage Blocked Apps…";
+
+    partial void OnBlockedAppCountChanged(int value) => OnPropertyChanged(nameof(ManageBlockedAppsLabel));
+
+    private void OnSettingsChanged(object? sender, SettingsChangedEventArgs e) =>
+        OnUiThread(() => BlockedAppCount = e.Config.BlockedAppIds.Count);
 
     /// <summary>Session count only applies when the run is finite (FR-006 vs FR-007).</summary>
     public bool IsSessionCountEnabled => !InfiniteMode;
@@ -351,6 +386,24 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     [RelayCommand]
     private void ShowHistory() => ShowHistoryRequested?.Invoke(this, EventArgs.Empty);
+
+    [RelayCommand]
+    private void ManageBlockedApps() => ShowBlockedAppsRequested?.Invoke(this, EventArgs.Empty);
+
+    [RelayCommand]
+    private void RequestAccessibility() => _appBlocking.RequestAccessibilityAccess();
+
+    /// <summary>
+    /// Re-reads Accessibility permission state. Called on load and whenever the window is
+    /// activated, since granting access in System Settings doesn't otherwise notify us.
+    /// </summary>
+    public void RefreshAppBlockingSupport()
+    {
+        OnPropertyChanged(nameof(IsAppBlockingSupported));
+        AppBlockingWarning = IsAppBlockingSupported
+            ? null
+            : "FocusFlow needs Accessibility access to hide blocked apps during a session.";
+    }
 
     private bool CanStart() => !IsSessionActive;
 
@@ -589,6 +642,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _timerService.SessionEnded -= OnSessionEnded;
         _timerService.SystemResumed -= OnSystemResumed;
         _timerService.ReminderDue -= OnReminderDue;
+        _settings.Changed -= OnSettingsChanged;
         GC.SuppressFinalize(this);
     }
 }

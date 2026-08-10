@@ -229,6 +229,30 @@
             </StackPanel>
         </Border>
 
+        <!-- App Blocking card. macOS only — see MacAppBlockingMonitor/NoopAppBlockingMonitor.
+             Management itself (the list, the picker) lives in its own window — see
+             BlockedAppsWindow — this card is just the entry point and the permission status,
+             the same split MainWindow already uses for session history. -->
+        <Border Classes="card">
+            <StackPanel Spacing="12">
+                <TextBlock Text="App Blocking" FontWeight="SemiBold" />
+                <TextBlock Text="Hide these apps and bring FocusFlow forward if you switch to them during a focus session."
+                           Foreground="{DynamicResource PaletteSecondary}"
+                           FontSize="11" TextWrapping="Wrap" />
+
+                <Button Content="{Binding ManageBlockedAppsLabel}" Classes="info" HorizontalAlignment="Stretch"
+                        Command="{Binding ManageBlockedAppsCommand}" />
+
+                <StackPanel Spacing="6" IsVisible="{Binding IsAppBlockingSupported, Converter={x:Static BoolConverters.Not}}">
+                    <TextBlock Text="{Binding AppBlockingWarning}"
+                               Foreground="{DynamicResource PaletteSecondary}"
+                               FontSize="11" TextWrapping="Wrap" />
+                    <Button Content="Open Accessibility Settings" Classes="info"
+                            Command="{Binding RequestAccessibilityCommand}" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
         <TextBlock Text="Closing this window keeps FocusFlow running in the tray."
                    Foreground="{DynamicResource PaletteSecondary}"
                    FontSize="11" TextWrapping="Wrap" />

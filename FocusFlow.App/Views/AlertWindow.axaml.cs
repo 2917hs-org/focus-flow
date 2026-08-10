@@ -14,7 +14,8 @@ public partial class AlertWindow : Window
         InitializeComponent();
     }
 
-    public AlertWindow(string heading, string body, string? confirmLabel = null) : this()
+    public AlertWindow(string heading, string body, string? confirmLabel = null, string declineLabel = "Not now")
+        : this()
     {
         HeadingText.Text = heading;
         BodyText.Text = body;
@@ -22,8 +23,11 @@ public partial class AlertWindow : Window
         if (confirmLabel is not null)
         {
             // Two-button form: the primary action is something the user is opting into,
-            // so it needs an explicit decline alongside it.
+            // so it needs an explicit decline alongside it. declineLabel defaults to "Not
+            // now" for the existing informational-opt-in callers; a destructive-action
+            // confirmation (e.g. "Unblock all apps?") reads better with "Cancel".
             PrimaryButton.Content = confirmLabel;
+            SecondaryButton.Content = declineLabel;
             SecondaryButton.IsVisible = true;
             SecondaryButton.Click += (_, _) => Close(false);
         }
