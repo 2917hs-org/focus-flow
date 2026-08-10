@@ -28,6 +28,7 @@ public partial class App : Avalonia.Application
     private ServiceProvider? _provider;
     private MainWindow? _mainWindow;
     private MiniTimerWindow? _miniTimerWindow;
+    private HistoryWindow? _historyWindow;
     private IWindowPlacementService? _placement;
 
     /// <summary>Set by Program when another launch was detected and refused.</summary>
@@ -138,6 +139,7 @@ public partial class App : Avalonia.Application
             WireTray(viewModel);
 
             viewModel.AlertRequested += (sender, e) => ShowAlert(e.Heading, e.Body);
+            viewModel.ShowHistoryRequested += (sender, e) => Dispatcher.UIThread.Post(ShowHistory);
 
             // Storage and permission failures raised from the application layer.
             _provider.GetRequiredService<UserAlerts>().AlertRaised +=
@@ -214,7 +216,6 @@ public partial class App : Avalonia.Application
         }
 
         // The menu drives the same commands the window does, so the two can't diverge.
-        tray.StartRequested += (sender, e) => Run(viewModel.StartCommand);
         tray.StartBreakRequested += (sender, e) => Run(viewModel.StartBreakCommand);
         tray.PredefinedRequested += (sender, minutes) => Dispatcher.UIThread.Post(() =>
         {
@@ -236,6 +237,42 @@ public partial class App : Avalonia.Application
                 _placement?.ShowOnActiveScreen(_mainWindow);
             }
         });
+
+        tray.ShowHistoryRequested += (sender, e) => Dispatcher.UIThread.Post(ShowHistory);
+    }
+
+    /// <summary>
+    /// Created lazily, unlike MiniTimerWindow: this is an occasionally-opened report, not
+    /// something that needs to exist before the user has ever asked for it. Reused rather
+    /// than recreated on every open so <see cref="HistoryViewModel"/>'s selected range
+    /// survives between visits in the same run.
+    /// </summary>
+    private void ShowHistory()
+    {
+        if (_historyWindow is null)
+        {
+            var window = new HistoryWindow
+            {
+                DataContext = _provider!.GetRequiredService<HistoryViewModel>()
+            };
+
+            window.Closing += (sender, e) =>
+            {
+                e.Cancel = true;
+                window.Hide();
+            };
+
+            _historyWindow = window;
+        }
+
+        // Picks up anything logged since the window was last opened.
+        if (_historyWindow.DataContext is HistoryViewModel viewModel
+            && viewModel.RefreshCommand.CanExecute(null))
+        {
+            viewModel.RefreshCommand.Execute(null);
+        }
+
+        _placement?.ShowOnActiveScreen(_historyWindow);
     }
 
     /// <summary>
@@ -306,6 +343,7 @@ public partial class App : Avalonia.Application
 #endif
 
         services.AddSingleton<MainWindowViewModel>();
+        services.AddSingleton<HistoryViewModel>();
 
         return services.BuildServiceProvider();
     }

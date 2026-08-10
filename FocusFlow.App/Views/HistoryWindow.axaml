@@ -1,0 +1,64 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:viewModels="using:FocusFlow.App.ViewModels"
+        x:Class="FocusFlow.App.Views.HistoryWindow"
+        x:DataType="viewModels:HistoryViewModel"
+        Title="FocusFlow — History"
+        Icon="/Assets/app-icon.png"
+        Width="440"
+        Height="520"
+        MinWidth="360"
+        MinHeight="360"
+        Background="{DynamicResource PaletteBackground}"
+        Foreground="{DynamicResource PaletteText}">
+
+    <Grid Margin="24" RowDefinitions="Auto,Auto,*">
+
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,12">
+            <TextBlock Grid.Column="0" Text="Session History"
+                       FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center" />
+            <ComboBox Grid.Column="1"
+                      ItemsSource="{Binding AvailableRanges}"
+                      SelectedItem="{Binding SelectedRange, Mode=TwoWay}" />
+        </Grid>
+
+        <Border Grid.Row="1" Classes="card" Margin="0,0,0,12">
+            <TextBlock Text="{Binding SummaryText}"
+                       TextWrapping="Wrap" TextAlignment="Center"
+                       HorizontalAlignment="Center" />
+        </Border>
+
+        <Grid Grid.Row="2">
+            <TextBlock Text="No sessions in this range."
+                       Foreground="{DynamicResource PaletteSecondary}"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                       IsVisible="{Binding NoEntries}" />
+
+            <!-- ListBox rather than a raw ItemsControl: this is the one place in the app
+                 the list could genuinely grow large (history.jsonl has no cap — see the
+                 README's own caveat about that), and ListBox virtualizes by default where
+                 a plain ItemsControl inside a ScrollViewer would not. -->
+            <ListBox ItemsSource="{Binding Entries}"
+                     IsVisible="{Binding HasEntries}"
+                     Background="Transparent"
+                     BorderThickness="0">
+                <ListBox.ItemTemplate>
+                    <DataTemplate DataType="viewModels:HistoryEntry">
+                        <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto"
+                              Margin="0,4">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding Mode}"
+                                       FontWeight="SemiBold" />
+                            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Duration}"
+                                       FontWeight="SemiBold" />
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="{Binding When}"
+                                       FontSize="11" Foreground="{DynamicResource PaletteSecondary}" />
+                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Outcome}"
+                                       FontSize="11" Foreground="{DynamicResource PaletteSecondary}"
+                                       HorizontalAlignment="Right" />
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </Grid>
+    </Grid>
+</Window>

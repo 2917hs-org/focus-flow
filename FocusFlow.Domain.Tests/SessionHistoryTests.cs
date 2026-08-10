@@ -1,3 +1,4 @@
+using FocusFlow.Application.Interfaces;
 using FocusFlow.Application.Services;
 using FocusFlow.Domain.Engines;
 using FocusFlow.Domain.Models;
@@ -133,6 +134,57 @@ public class SessionHistoryTests : IDisposable
         // ...but the abandoned 10 minutes were still time spent.
         Assert.Equal(TimeSpan.FromMinutes(60), summary.TotalStudyTime);
         Assert.Equal(TimeSpan.FromMinutes(5), summary.TotalBreakTime);
+    }
+
+    [Fact]
+    public void GetRecordsReturnsNewestFirst_ForAReportThatReadsTopToBottom()
+    {
+        var store = new JsonLinesSessionHistoryStore(HistoryPath);
+        store.Append(Record(TimerMode.Study, 25, daysAgo: 2));
+        store.Append(Record(TimerMode.Break, 5, daysAgo: 1));
+        store.Append(Record(TimerMode.Study, 25, daysAgo: 0));
+
+        var service = new SessionHistoryService(
+            new TimerService(new TimerEngine(new FakeTimeProvider())), store, TimeProvider.System);
+
+        var records = service.GetRecords();
+
+        Assert.Equal(3, records.Count);
+        Assert.True(records[0].EndedAt >= records[1].EndedAt);
+        Assert.True(records[1].EndedAt >= records[2].EndedAt);
+    }
+
+    [Fact]
+    public void GetRecordsRespectsSince_SameAsSummarise()
+    {
+        var store = new JsonLinesSessionHistoryStore(HistoryPath);
+        store.Append(Record(TimerMode.Study, 25, daysAgo: 3));
+        store.Append(Record(TimerMode.Study, 25));
+
+        var service = new SessionHistoryService(
+            new TimerService(new TimerEngine(new FakeTimeProvider())), store, TimeProvider.System);
+
+        var recent = service.GetRecords(DateTimeOffset.UtcNow.AddDays(-1));
+
+        Assert.Single(recent);
+    }
+
+    [Fact]
+    public void GetRecordsOnAnUnreadableLogReturnsEmptyRatherThanThrowing()
+    {
+        var service = new SessionHistoryService(
+            new TimerService(new TimerEngine(new FakeTimeProvider())),
+            new FailingHistoryStore(),
+            TimeProvider.System);
+
+        Assert.Empty(service.GetRecords());
+    }
+
+    private sealed class FailingHistoryStore : ISessionHistoryStore
+    {
+        public void Append(SessionRecord record) => throw new IOException("Disk is read-only.");
+        public IReadOnlyList<SessionRecord> Read(DateTimeOffset? since = null) =>
+            throw new IOException("Disk is read-only.");
     }
 
     [Fact]

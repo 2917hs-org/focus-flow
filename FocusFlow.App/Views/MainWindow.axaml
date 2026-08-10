@@ -68,6 +68,9 @@
                    HorizontalAlignment="Center" FontSize="12"
                    TextWrapping="Wrap" TextAlignment="Center" />
 
+        <Button Content="View History" Command="{Binding ShowHistoryCommand}"
+                HorizontalAlignment="Center" Padding="8,2" FontSize="11" />
+
         <!-- Transport -->
         <StackPanel x:Name="Transport" Orientation="Horizontal"
                     HorizontalAlignment="Center" Spacing="6">

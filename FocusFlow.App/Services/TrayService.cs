@@ -51,7 +51,6 @@ public sealed class TrayService : ITrayService, IDisposable
     private readonly IMenuBarCountdown _countdown;
 
     private readonly NativeMenuItem _statusItem;
-    private readonly NativeMenuItem _startItem;
     private readonly NativeMenuItem _breakItem;
     private readonly NativeMenuItem _predefinedItem;
     private readonly NativeMenuItem _pauseItem;
@@ -67,7 +66,6 @@ public sealed class TrayService : ITrayService, IDisposable
         // Disabled on purpose: a readout, not an action.
         _statusItem = new NativeMenuItem("FocusFlow") { IsEnabled = false };
 
-        _startItem = Action("Start", () => StartRequested);
         _breakItem = Action("Take a Break", () => StartBreakRequested);
         _pauseItem = Action("Pause", () => PauseRequested);
         _resumeItem = Action("Resume", () => ResumeRequested);
@@ -75,8 +73,10 @@ public sealed class TrayService : ITrayService, IDisposable
         _resetItem = Action("Reset", () => ResetRequested);
         _stopItem = Action("Stop", () => StopRequested);
 
-        // A submenu rather than two more top-level rows: these are variants of one action,
-        // and the menu already carries seven.
+        // No bare "Start" item: it would start whatever length is currently saved in
+        // settings, with no way to tell from the tray what that length actually is. The
+        // labelled options below and "Open Main Window" (where the length is visible) are
+        // the two ways to start without guessing.
         _predefinedItem = new NativeMenuItem("Focus Session")
         {
             Menu = new NativeMenu
@@ -90,6 +90,9 @@ public sealed class TrayService : ITrayService, IDisposable
 
         var open = new NativeMenuItem("Open Main Window");
         open.Click += (_, _) => OpenRequested?.Invoke(this, EventArgs.Empty);
+
+        var history = new NativeMenuItem("View History");
+        history.Click += (_, _) => ShowHistoryRequested?.Invoke(this, EventArgs.Empty);
 
         var quit = new NativeMenuItem("Quit");
         quit.Click += (_, _) => Shutdown();
@@ -105,7 +108,6 @@ public sealed class TrayService : ITrayService, IDisposable
             {
                 _statusItem,
                 new NativeMenuItemSeparator(),
-                _startItem,
                 _predefinedItem,
                 _breakItem,
                 _pauseItem,
@@ -115,6 +117,7 @@ public sealed class TrayService : ITrayService, IDisposable
                 _stopItem,
                 new NativeMenuItemSeparator(),
                 open,
+                history,
                 quit
             }
         };
@@ -128,7 +131,6 @@ public sealed class TrayService : ITrayService, IDisposable
         MacOSProperties.SetIsTemplateIcon(_trayIcon, true);
     }
 
-    public event EventHandler? StartRequested;
     public event EventHandler? StartBreakRequested;
 
     /// <summary>A fixed-length focus session was chosen; the argument is its length in minutes.</summary>
@@ -141,6 +143,9 @@ public sealed class TrayService : ITrayService, IDisposable
 
     /// <summary>"Open Main Window" chosen — show the full settings window.</summary>
     public event EventHandler? OpenRequested;
+
+    /// <summary>"View History" chosen — show the session history window.</summary>
+    public event EventHandler? ShowHistoryRequested;
 
     public void UpdateStatus(TrayStatus status)
     {
@@ -159,7 +164,6 @@ public sealed class TrayService : ITrayService, IDisposable
 
         // Hidden rather than greyed: a Pause entry that is permanently unavailable during
         // a study session would dangle the very option the design removes.
-        _startItem.IsVisible = status.CanStart;
         _predefinedItem.IsVisible = status.CanStart;
         _breakItem.IsVisible = status.CanStartBreak;
         _pauseItem.IsVisible = status.CanPause;
