@@ -139,6 +139,8 @@ public sealed class SettingsService : ISettingsService, IDisposable
         && a.AutoStartBreak == b.AutoStartBreak
         && a.AutoStartStudy == b.AutoStartStudy
         && a.AlarmSoundPath == b.AlarmSoundPath
+        && a.IdleAutoPauseEnabled == b.IdleAutoPauseEnabled
+        && a.IdleAutoPauseThreshold == b.IdleAutoPauseThreshold
         && a.BlockedAppIds.SequenceEqual(b.BlockedAppIds, StringComparer.OrdinalIgnoreCase)
         // Record equality, so this is a value comparison, not a reference one — required
         // here: without it, an update that changes only a hotkey binding would look like a

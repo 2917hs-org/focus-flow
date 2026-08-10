@@ -34,6 +34,14 @@ public class TimerConfig
     public static readonly TimeSpan MinReminderLead = TimeSpan.FromSeconds(30);
     public static readonly TimeSpan MaxReminderLead = TimeSpan.FromMinutes(10);
 
+    /// <summary>
+    /// Below this, ordinary typing pauses and brief look-aways would trigger a pause;
+    /// above <see cref="MaxIdleThreshold"/> the feature stops being "stepped away" and
+    /// starts being "forgot this exists".
+    /// </summary>
+    public static readonly TimeSpan MinIdleThreshold = TimeSpan.FromMinutes(1);
+    public static readonly TimeSpan MaxIdleThreshold = TimeSpan.FromMinutes(30);
+
     /// <summary>Schema of the file this was loaded from; see <see cref="CurrentSchemaVersion"/>.</summary>
     public int SchemaVersion { get; set; } = CurrentSchemaVersion;
 
@@ -83,6 +91,20 @@ public class TimerConfig
     /// <summary>How long before the end the reminder fires.</summary>
     public TimeSpan ReminderLeadTime { get; set; } = TimeSpan.FromMinutes(2);
 
+    /// <summary>
+    /// Pause an active, unpaused session after no keyboard/mouse input for
+    /// <see cref="IdleAutoPauseThreshold"/>. Never auto-resumes — see IIdleTimeProvider.
+    /// </summary>
+    public bool IdleAutoPauseEnabled { get; set; } = true;
+
+    /// <summary>
+    /// How long the machine has to sit untouched before an active session is
+    /// auto-paused. Three minutes is long enough to survive a normal typing pause or a
+    /// quick look at something else, short enough to actually catch someone who stepped
+    /// away.
+    /// </summary>
+    public TimeSpan IdleAutoPauseThreshold { get; set; } = TimeSpan.FromMinutes(3);
+
     /// <summary>FR-015.</summary>
     public AppTheme Theme { get; set; } = AppTheme.System;
 
@@ -117,6 +139,8 @@ public class TimerConfig
         LaunchOnStartup = LaunchOnStartup,
         ReminderEnabled = ReminderEnabled,
         ReminderLeadTime = ReminderLeadTime,
+        IdleAutoPauseEnabled = IdleAutoPauseEnabled,
+        IdleAutoPauseThreshold = IdleAutoPauseThreshold,
         Theme = Theme,
         BlockedAppIds = [..BlockedAppIds],
         // HotkeyBinding is an immutable record — a reference copy is a safe, sufficient
@@ -144,6 +168,10 @@ public class TimerConfig
         clone.ReminderLeadTime = clone.ReminderLeadTime < MinReminderLead ? MinReminderLead
             : clone.ReminderLeadTime > MaxReminderLead ? MaxReminderLead
             : clone.ReminderLeadTime;
+
+        clone.IdleAutoPauseThreshold = clone.IdleAutoPauseThreshold < MinIdleThreshold ? MinIdleThreshold
+            : clone.IdleAutoPauseThreshold > MaxIdleThreshold ? MaxIdleThreshold
+            : clone.IdleAutoPauseThreshold;
 
         if (string.IsNullOrWhiteSpace(clone.AlarmSoundPath))
         {
