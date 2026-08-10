@@ -26,8 +26,14 @@ public sealed class MacAudioPlayer : IAudioPlayer, IDisposable
 
     private readonly Lazy<IReadOnlyList<AlarmSound>> _sounds = new(DiscoverSounds);
     private readonly Lock _gate = new();
+    private readonly IAppLogger? _logger;
 
     private Process? _current;
+
+    public MacAudioPlayer(IAppLogger? logger = null)
+    {
+        _logger = logger;
+    }
 
     public IReadOnlyList<AlarmSound> AvailableSounds => _sounds.Value;
 
@@ -65,9 +71,10 @@ public sealed class MacAudioPlayer : IAudioPlayer, IDisposable
                 _current = Process.Start(startInfo);
             }
         }
-        catch (Exception)
+        catch (Exception e)
         {
             // A failed alarm must never take the timer down with it.
+            _logger?.Warn($"afplay failed to start: {e.Message}");
         }
     }
 
@@ -84,9 +91,10 @@ public sealed class MacAudioPlayer : IAudioPlayer, IDisposable
 
                 _current?.Dispose();
             }
-            catch (Exception)
+            catch (Exception e)
             {
                 // Already gone, or never started.
+                _logger?.Warn($"Stopping afplay failed: {e.Message}");
             }
             finally
             {

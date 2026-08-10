@@ -22,6 +22,7 @@ public sealed class SessionPersistenceService : IDisposable
     private readonly ISessionStateStorage _storage;
     private readonly TimeProvider _timeProvider;
     private readonly IUserAlerts? _alerts;
+    private readonly IAppLogger? _logger;
     private readonly Lock _gate = new();
 
     private long _lastWrite;
@@ -32,12 +33,14 @@ public sealed class SessionPersistenceService : IDisposable
         ITimerService timerService,
         ISessionStateStorage storage,
         TimeProvider timeProvider,
-        IUserAlerts? alerts = null)
+        IUserAlerts? alerts = null,
+        IAppLogger? logger = null)
     {
         _timerService = timerService;
         _storage = storage;
         _timeProvider = timeProvider;
         _alerts = alerts;
+        _logger = logger;
     }
 
     /// <summary>
@@ -57,9 +60,10 @@ public sealed class SessionPersistenceService : IDisposable
                 restored = true;
             }
         }
-        catch (Exception)
+        catch (Exception e)
         {
             // A damaged state file should cost the resume, not the launch.
+            _logger?.Warn($"Restoring the saved session failed: {e.Message}");
         }
 
         lock (_gate)
@@ -133,8 +137,11 @@ public sealed class SessionPersistenceService : IDisposable
         {
             _storage.Clear();
         }
-        catch (Exception)
+        catch (Exception e)
         {
+            // A leftover snapshot at worst offers to resume a session that already
+            // finished — annoying, not damaging.
+            _logger?.Warn($"Clearing the session snapshot failed: {e.Message}");
         }
     }
 

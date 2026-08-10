@@ -13,6 +13,15 @@ public sealed class UserAlerts : IUserAlerts
 {
     private readonly HashSet<string> _reported = new(StringComparer.Ordinal);
     private readonly Lock _gate = new();
+    private readonly IAppLogger? _logger;
+
+    // Optional and defaulted, like every other cross-cutting collaborator in this layer
+    // (see IUserAlerts? on the services that report through here) — tests construct this
+    // with no logger and don't need to care that one exists.
+    public UserAlerts(IAppLogger? logger = null)
+    {
+        _logger = logger;
+    }
 
     public event EventHandler<(string Heading, string Body)>? AlertRaised;
 
@@ -28,6 +37,9 @@ public sealed class UserAlerts : IUserAlerts
             }
         }
 
+        // The dialog the user sees is transient; this is what's left once they dismiss
+        // it, in case the same problem is still worth explaining next time they ask.
+        _logger?.Error($"{heading} — {body}");
         AlertRaised?.Invoke(this, (heading, body));
     }
 }

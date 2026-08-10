@@ -5,6 +5,19 @@
     <!-- "Default" ThemeVariant follows system theme variant. "Dark" or "Light" are other available options. -->
 
     <Application.Resources>
+        <!-- FluentTheme's controls (CheckBox, Slider, unclassed Buttons, ComboBox
+             selection, focus rings, …) read these accent keys via DynamicResource.
+             Overriding them here swaps Fluent's own blue for macOS's system blue, so the
+             stock controls tint the way the rest of the OS does instead of announcing
+             themselves as a Windows-style app. -->
+        <Color x:Key="SystemAccentColor">#007AFF</Color>
+        <Color x:Key="SystemAccentColorLight1">#2694FF</Color>
+        <Color x:Key="SystemAccentColorLight2">#4DABFF</Color>
+        <Color x:Key="SystemAccentColorLight3">#73C1FF</Color>
+        <Color x:Key="SystemAccentColorDark1">#0068D9</Color>
+        <Color x:Key="SystemAccentColorDark2">#0055B2</Color>
+        <Color x:Key="SystemAccentColorDark3">#00438C</Color>
+
         <!-- Mid-toned and saturated on purpose: each of these carries white text and has to
              stay legible against both the light and the dark theme, so a single value per
              role avoids maintaining two palettes. -->
@@ -27,6 +40,13 @@
 
     <Application.Styles>
         <FluentTheme />
+
+        <!-- Fluent's default corner radius (4px) reads as Windows; macOS controls sit
+             closer to 6-8px. Applied to the stock input controls only — the semantic
+             buttons below already set their own look and shouldn't inherit this. -->
+        <Style Selector="Button, ComboBox, TextBox, NumericUpDown">
+            <Setter Property="CornerRadius" Value="6" />
+        </Style>
 
         <!-- Fluent restyles the inner ContentPresenter on hover and press, so setting
              Background on the Button alone would snap back to the theme colour the moment

@@ -19,6 +19,17 @@ public class UserAlertTests
             Alerts.Add((key, heading, body));
     }
 
+    private sealed class RecordingLogger : IAppLogger
+    {
+        public List<string> Errors { get; } = [];
+
+        public void Info(string message) { }
+        public void Warn(string message) { }
+
+        public void Error(string message, Exception? exception = null) =>
+            Errors.Add(message);
+    }
+
     private sealed class FailingConfigStorage : IConfigStorage
     {
         public bool FailLoad { get; init; }
@@ -147,6 +158,34 @@ public class UserAlertTests
         clock.Run(TimeSpan.FromMinutes(1));
 
         Assert.Contains(alerts.Alerts, a => a.Key == "history-save");
+    }
+
+    [Fact]
+    public void AReportedFailureIsAlsoLogged()
+    {
+        // The dialog is transient; the log is what's left once it's dismissed.
+        var logger = new RecordingLogger();
+        var sink = new UserAlerts(logger);
+
+        sink.Report("settings-save", "FocusFlow can't save your settings", "disk is read-only");
+
+        var entry = Assert.Single(logger.Errors);
+        Assert.Contains("FocusFlow can't save your settings", entry);
+        Assert.Contains("disk is read-only", entry);
+    }
+
+    [Fact]
+    public void ARepeatedFailureIsLoggedOnlyOnce()
+    {
+        var logger = new RecordingLogger();
+        var sink = new UserAlerts(logger);
+
+        for (var i = 0; i < 5; i++)
+        {
+            sink.Report("settings-save", "heading", "body");
+        }
+
+        Assert.Single(logger.Errors);
     }
 
     [Fact]

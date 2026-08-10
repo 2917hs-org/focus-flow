@@ -33,6 +33,7 @@ public sealed class SessionHistoryService : IDisposable
     private readonly ISessionHistoryStore _store;
     private readonly TimeProvider _timeProvider;
     private readonly IUserAlerts? _alerts;
+    private readonly IAppLogger? _logger;
 
     private bool _started;
     private bool _disposed;
@@ -41,12 +42,14 @@ public sealed class SessionHistoryService : IDisposable
         ITimerService timerService,
         ISessionHistoryStore store,
         TimeProvider timeProvider,
-        IUserAlerts? alerts = null)
+        IUserAlerts? alerts = null,
+        IAppLogger? logger = null)
     {
         _timerService = timerService;
         _store = store;
         _timeProvider = timeProvider;
         _alerts = alerts;
+        _logger = logger;
     }
 
     public void StartTracking()
@@ -95,8 +98,12 @@ public sealed class SessionHistoryService : IDisposable
                 Total(records, TimerMode.Study),
                 Total(records, TimerMode.Break));
         }
-        catch (Exception)
+        catch (Exception e)
         {
+            // The "today" summary just goes blank rather than throwing through to the
+            // view model — but a history that stopped being readable is worth knowing
+            // about even if it isn't worth interrupting anyone for.
+            _logger?.Warn($"Reading session history failed: {e.Message}");
             return HistorySummary.Empty;
         }
     }

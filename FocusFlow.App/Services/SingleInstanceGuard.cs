@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using FocusFlow.Application.Interfaces;
 
 namespace FocusFlow.App.Services;
 
@@ -24,18 +25,20 @@ public sealed class SingleInstanceGuard : IDisposable
 {
     private readonly string _lockPath;
     private readonly string _signalPath;
+    private readonly IAppLogger? _logger;
 
     private FileStream? _lock;
     private FileSystemWatcher? _watcher;
     private bool _disposed;
 
-    public SingleInstanceGuard(string directory)
+    public SingleInstanceGuard(string directory, IAppLogger? logger = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(directory);
         Directory.CreateDirectory(directory);
 
         _lockPath = Path.Combine(directory, "instance.lock");
         _signalPath = Path.Combine(directory, "activate.signal");
+        _logger = logger;
     }
 
     /// <summary>Raised when another launch asked this instance to show itself.</summary>
@@ -83,11 +86,15 @@ public sealed class SingleInstanceGuard : IDisposable
         }
         catch (IOException)
         {
+            // The expected path when another instance is already running — not a
+            // failure, so not logged here. Program logs the outcome of the retry loop
+            // this feeds into instead.
             return false;
         }
-        catch (UnauthorizedAccessException)
+        catch (UnauthorizedAccessException e)
         {
             // Can't tell either way; better to run than to refuse to start.
+            _logger?.Warn($"Could not tell whether another instance holds the lock: {e.Message}");
             return true;
         }
 
@@ -100,9 +107,10 @@ public sealed class SingleInstanceGuard : IDisposable
         {
             File.WriteAllText(_signalPath, DateTimeOffset.UtcNow.ToString("O"));
         }
-        catch (Exception)
+        catch (Exception e)
         {
             // Worst case the first instance stays hidden; the user clicks the tray icon.
+            _logger?.Warn($"Signalling the running instance failed: {e.Message}");
         }
     }
 
@@ -121,9 +129,10 @@ public sealed class SingleInstanceGuard : IDisposable
             _watcher.Created += OnSignal;
             _watcher.Changed += OnSignal;
         }
-        catch (Exception)
+        catch (Exception e)
         {
             // Single-instance still holds; only the "focus the first window" nicety is lost.
+            _logger?.Warn($"Watching for activation signals failed: {e.Message}");
         }
     }
 
@@ -145,8 +154,10 @@ public sealed class SingleInstanceGuard : IDisposable
             {
                 File.Delete(_signalPath);
             }
-            catch (Exception)
+            catch (Exception e)
             {
+                // A leftover signal file at worst causes one redundant activation later.
+                _logger?.Warn($"Deleting the activation signal failed: {e.Message}");
             }
         });
     }

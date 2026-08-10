@@ -14,6 +14,13 @@ namespace FocusFlow.App.Platforms.MacOS;
 /// </remarks>
 public sealed class MacNotificationService : INotificationService
 {
+    private readonly IAppLogger? _logger;
+
+    public MacNotificationService(IAppLogger? logger = null)
+    {
+        _logger = logger;
+    }
+
     public void ShowNotification(string title, string message)
     {
         if (!OperatingSystem.IsMacOS())
@@ -34,9 +41,10 @@ public sealed class MacNotificationService : INotificationService
 
             using var process = Process.Start(startInfo);
         }
-        catch (Exception)
+        catch (Exception e)
         {
             // A failed notification must never take the timer down with it.
+            _logger?.Warn($"osascript notification failed: {e.Message}");
         }
     }
 

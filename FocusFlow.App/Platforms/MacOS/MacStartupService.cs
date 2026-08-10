@@ -22,6 +22,13 @@ public sealed class MacStartupService : IStartupService
     /// </summary>
     private const string Label = "com.hasansiddiqui.focusflow";
 
+    private readonly IAppLogger? _logger;
+
+    public MacStartupService(IAppLogger? logger = null)
+    {
+        _logger = logger;
+    }
+
     /// <summary>
     /// Only offered from a real .app bundle — see <see cref="BundlePath"/> for why the raw
     /// executable is not good enough.
@@ -65,6 +72,9 @@ public sealed class MacStartupService : IStartupService
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or SecurityException)
         {
+            // The caller already surfaces this as "Couldn't update the login item" —
+            // the detail below is what explains why, next time someone has to dig in.
+            _logger?.Warn($"Updating the login item failed: {e.Message}");
             return false;
         }
     }
@@ -122,7 +132,7 @@ public sealed class MacStartupService : IStartupService
 
          """;
 
-    private static void RunLaunchctl(string verb, string plistPath)
+    private void RunLaunchctl(string verb, string plistPath)
     {
         try
         {
@@ -137,9 +147,10 @@ public sealed class MacStartupService : IStartupService
             using var process = Process.Start(startInfo);
             process?.WaitForExit(5000);
         }
-        catch (Exception)
+        catch (Exception e)
         {
             // The plist alone is enough from the next login onwards.
+            _logger?.Warn($"launchctl {verb} failed: {e.Message}");
         }
     }
 }

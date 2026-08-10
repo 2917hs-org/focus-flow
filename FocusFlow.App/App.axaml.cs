@@ -11,6 +11,7 @@ using FocusFlow.Application.Interfaces;
 using FocusFlow.Application.Services;
 using FocusFlow.Domain.Engines;
 using FocusFlow.Domain.Interfaces;
+using FocusFlow.Infrastructure.Logging;
 using FocusFlow.Infrastructure.Storage;
 using Microsoft.Extensions.DependencyInjection;
 #if WINDOWS
@@ -232,6 +233,8 @@ public partial class App : Avalonia.Application
             new JsonSessionStateStorage(JsonSessionStateStorage.DefaultPath()));
         services.AddSingleton<ISessionHistoryStore>(_ =>
             new JsonLinesSessionHistoryStore(JsonLinesSessionHistoryStore.DefaultPath()));
+        services.AddSingleton<IAppLogger>(_ =>
+            new FileAppLogger(FileAppLogger.DefaultDirectory()));
 
         // Presentation. The tray is one Avalonia implementation for every OS; the rest
         // are switched per target framework.
