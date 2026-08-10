@@ -159,6 +159,22 @@
                                                HorizontalAlignment="Stretch" />
                             </StackPanel>
                         </Grid>
+
+                        <!-- Pauses an active, unpaused session after this much idle time and
+                             stays paused — it never auto-resumes, since activity returning
+                             isn't proof the user is back to focusing. See IIdleTimeProvider. -->
+                        <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="8">
+                            <CheckBox Grid.Column="0" Content="Auto-pause when idle after"
+                                      IsChecked="{Binding IdleAutoPauseEnabled, Mode=TwoWay}"
+                                      VerticalAlignment="Center" />
+                            <ComboBox Grid.Column="1" IsEditable="True"
+                                      ItemsSource="{Binding IdleAutoPauseMinutePresets}"
+                                      Text="{Binding IdleAutoPauseMinutes, Mode=TwoWay}"
+                                      IsEnabled="{Binding IdleAutoPauseEnabled}"
+                                      Width="100" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="2" Text="min" VerticalAlignment="Center" Margin="4,0,0,0"
+                                       Foreground="{DynamicResource PaletteSecondary}" />
+                        </Grid>
                     </StackPanel>
                 </Expander>
             </StackPanel>

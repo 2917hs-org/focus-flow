@@ -68,6 +68,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     [ObservableProperty] private AppTheme _theme;
     [ObservableProperty] private bool _reminderEnabled;
     [ObservableProperty] private int _reminderLeadMinutes;
+    [ObservableProperty] private bool _idleAutoPauseEnabled;
+    [ObservableProperty] private int _idleAutoPauseMinutes;
 
     [ObservableProperty] private string _currentTime = "25:00";
     [ObservableProperty] private string _statusText = "Ready";
@@ -156,6 +158,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     /// <summary>Quick-pick options in the Break dropdown; any value up to 60 can still be typed.</summary>
     public IReadOnlyList<int> BreakDurationPresets { get; } = [5, 10, 15, 20, 30, 45, 60];
 
+    /// <summary>Quick-pick options in the idle-threshold dropdown; any value up to 30 can still be typed.</summary>
+    public IReadOnlyList<int> IdleAutoPauseMinutePresets { get; } = [1, 2, 3, 5, 10, 15, 30];
+
     public bool IsStartupSupported => _startupService.IsSupported;
 
     /// <summary>
@@ -200,6 +205,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             Theme = config.Theme;
             ReminderEnabled = config.ReminderEnabled;
             ReminderLeadMinutes = Math.Max(1, (int)Math.Round(config.ReminderLeadTime.TotalMinutes));
+            IdleAutoPauseEnabled = config.IdleAutoPauseEnabled;
+            IdleAutoPauseMinutes = Math.Max(1, (int)Math.Round(config.IdleAutoPauseThreshold.TotalMinutes));
             SelectedSound = ResolveSound(config.AlarmSoundPath);
 
             // Trust the OS over the config file: the user may have removed the login item
@@ -279,6 +286,24 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     partial void OnReminderLeadMinutesChanged(int value) =>
         Persist(c => c.ReminderLeadTime = TimeSpan.FromMinutes(value));
+
+    partial void OnIdleAutoPauseEnabledChanged(bool value) => Persist(c => c.IdleAutoPauseEnabled = value);
+
+    // Now an editable dropdown rather than a NumericUpDown, so — same reasoning as
+    // OnStudyDurationChanged/OnBreakDurationChanged — nothing upstream clamps a typed
+    // value; enforce the 1-30 minute range here instead.
+    partial void OnIdleAutoPauseMinutesChanged(int value)
+    {
+        var clamped = Math.Clamp(value, (int)TimerConfig.MinIdleThreshold.TotalMinutes,
+            (int)TimerConfig.MaxIdleThreshold.TotalMinutes);
+        if (clamped != value)
+        {
+            IdleAutoPauseMinutes = clamped;
+            return;
+        }
+
+        Persist(c => c.IdleAutoPauseThreshold = TimeSpan.FromMinutes(value));
+    }
 
     partial void OnMusicPathChanged(string? value) => Persist(c => c.MusicPath = value);
 

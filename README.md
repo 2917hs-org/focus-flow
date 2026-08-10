@@ -21,7 +21,7 @@ unsigned and largely unexercised; localization is not started — see
 
 | | |
 |---|---|
-| Tests | 144 passing (xUnit + `FakeTimeProvider`) |
+| Tests | 164 passing (xUnit + `FakeTimeProvider`) |
 | Builds | Debug + Release, both target frameworks, 0 warnings |
 | macOS | `.app` + DMG build and run; verified menu-bar and mini-widget behaviour |
 | Windows | Compiles, publishes and zips into a portable build — **the runtime path has never been executed** |
@@ -42,6 +42,10 @@ unsigned and largely unexercised; localization is not started — see
 - A paused study session still shows in history as `Stopped` if you end it rather than
   resume it — pausing doesn't change how the outcome is recorded, only whether the clock
   is moving
+- **Auto-pause when idle** — no keyboard/mouse input for a configurable stretch (1–30 min,
+  default 3) pauses an active, unpaused session automatically. Never auto-resumes: picking
+  it back up is always a deliberate action, since the mouse moving again isn't proof
+  you're back to focusing
 
 **Alerts**
 - A configurable **reminder before a session ends** (1–10 minutes), which stands in for
@@ -269,6 +273,7 @@ time spent; an immediate start-then-stop is discarded as a misclick.
 | Audio | `afplay -v` | MCI (`mciSendString`, winmm) |
 | Launch at login | `~/Library/LaunchAgents` → `open -a` the bundle | `HKCU\…\CurrentVersion\Run` |
 | Pointer position | CoreGraphics `CGEventGetLocation` | `GetCursorPos` |
+| Idle detection | CoreGraphics `CGEventSourceSecondsSinceLastEventType` | `GetLastInputInfo` |
 | Sleep detection | Poll-gap heuristic (shared) | Poll-gap heuristic (shared) |
 | App blocking | Polls `NSWorkspace.frontmostApplication` (~500ms); hides the match and activates FocusFlow via `objc_msgSend`. Gated on `AXIsProcessTrusted` | Not implemented — no-op |
 | Global hotkeys | Carbon `RegisterEventHotKey`/`InstallEventHandler` on the app's own main run loop — no permission required | `RegisterHotKey` delivered to a hidden window on a dedicated message-loop thread |
@@ -326,7 +331,7 @@ negative space so the mark still reads.
 - **Code signing / notarisation** on either platform.
 - **Launch minimized** — the window is shown on first launch.
 - Localization, accessibility (screen reader / high contrast), auto-update.
-- No CI pipeline — the 107 tests only protect a change if someone remembers to run them.
+- No CI pipeline — the 164 tests only protect a change if someone remembers to run them.
 - `history.jsonl` has no rotation or cap, unlike the new log files — it will grow for as
   long as the app is used.
 - **App blocking is Windows-only unimplemented** (macOS is done — see

@@ -102,6 +102,9 @@ public partial class App : Avalonia.Application
         // unsupported (Windows, or macOS without Accessibility access granted yet).
         _provider.GetRequiredService<AppBlockingService>().StartTracking();
 
+        // Begin auto-pausing on idle once a session is running.
+        _provider.GetRequiredService<IdleAutoPauseService>().StartTracking();
+
         _placement = _provider.GetRequiredService<IWindowPlacementService>();
 
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
@@ -401,6 +404,7 @@ public partial class App : Avalonia.Application
         // the interface.
         services.AddSingleton<AppBlockingService>();
         services.AddSingleton<IAppBlockingService>(sp => sp.GetRequiredService<AppBlockingService>());
+        services.AddSingleton<IdleAutoPauseService>();
 
         // Infrastructure
         services.AddSingleton<IConfigStorage>(_ =>
@@ -427,6 +431,7 @@ public partial class App : Avalonia.Application
         services.AddSingleton<IAudioPlayer, WindowsAudioPlayer>();
         services.AddSingleton<IStartupService, WindowsStartupService>();
         services.AddSingleton<IPointerLocator, WindowsPointerLocator>();
+        services.AddSingleton<IIdleTimeProvider, WindowsIdleTimeProvider>();
         services.AddSingleton<IMenuBarCountdown, NoopMenuBarCountdown>();
         services.AddSingleton<IAppBlockingMonitor, NoopAppBlockingMonitor>();
         services.AddSingleton<IGlobalHotkeys, WindowsGlobalHotkeys>();
@@ -435,6 +440,7 @@ public partial class App : Avalonia.Application
         services.AddSingleton<IAudioPlayer, MacAudioPlayer>();
         services.AddSingleton<IStartupService, MacStartupService>();
         services.AddSingleton<IPointerLocator, MacPointerLocator>();
+        services.AddSingleton<IIdleTimeProvider, MacIdleTimeProvider>();
         services.AddSingleton<IMenuBarCountdown, NativeMenuBarCountdown>();
         services.AddSingleton<IAppBlockingMonitor, MacAppBlockingMonitor>();
         services.AddSingleton<IGlobalHotkeys, MacGlobalHotkeys>();
