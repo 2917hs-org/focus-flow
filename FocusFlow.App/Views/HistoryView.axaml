@@ -1,0 +1,163 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:FocusFlow.App.ViewModels"
+             x:Class="FocusFlow.App.Views.HistoryView"
+             x:DataType="viewModels:HistoryViewModel">
+
+    <!-- Embedded in MainWindow as one of its navigable pages (see MainPage) rather than its
+         own Window — same content HistoryWindow used to host, minus the window chrome
+         (Title/Icon/Width/Height/margin) MainWindow's Back bar and Root StackPanel already
+         provide. No "Session History" title of its own for the same reason: the Back bar
+         above this shows CurrentPageTitle instead, so there's nothing to duplicate. -->
+    <UserControl.Styles>
+        <!-- Local Border.card, same pattern MainWindow/BlockedAppsView each use rather than
+             sharing one from App.axaml. -->
+        <Style Selector="Border.card">
+            <Setter Property="Background" Value="{DynamicResource PaletteSurface}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PaletteBorder}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="Padding" Value="16" />
+        </Style>
+    </UserControl.Styles>
+
+    <StackPanel Spacing="12">
+
+        <!-- Column 0 left empty on purpose: with the title gone, an empty star column still
+             pushes both dropdowns to the right, same position they held before. -->
+        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+            <ComboBox Grid.Column="1"
+                      ItemsSource="{Binding AvailableLabelFilters}"
+                      SelectedItem="{Binding SelectedLabelFilter, Mode=TwoWay}"
+                      ToolTip.Tip="Filter by label" />
+            <ComboBox Grid.Column="2"
+                      ItemsSource="{Binding AvailableRanges}"
+                      SelectedItem="{Binding SelectedRange, Mode=TwoWay}">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate DataType="viewModels:HistoryRange">
+                        <TextBlock Text="{Binding Converter={x:Static viewModels:HistoryRangeDisplay.Converter}}" />
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+        </Grid>
+
+        <Border Classes="card">
+            <StackPanel Spacing="6">
+                <TextBlock Text="{Binding SummaryText}"
+                           TextWrapping="Wrap" TextAlignment="Center"
+                           HorizontalAlignment="Center" />
+                <TextBlock Text="{Binding StreakText}"
+                           FontSize="12" FontWeight="SemiBold"
+                           Foreground="{DynamicResource PalettePrimary}"
+                           HorizontalAlignment="Center" />
+            </StackPanel>
+        </Border>
+
+        <!-- Only shown once there's at least one day of study time in range — an empty
+             chart (fresh install, or a range with nothing in it) would just be an empty
+             card taking up space above the "No sessions" message below. -->
+        <Border Classes="card" IsVisible="{Binding HasChartData}">
+            <StackPanel>
+                <TextBlock Text="Daily focus minutes" FontSize="12" FontWeight="SemiBold"
+                           Foreground="{DynamicResource PaletteSecondary}" Margin="0,0,0,10" />
+                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                    <ItemsControl ItemsSource="{Binding ChartBars}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="viewModels:DailyChartBar">
+                                <!-- Width="32", not the bar track's own 14 + margin: "Aug 10"
+                                     at FontSize 9 needs more room than the bar itself does, and
+                                     a StackPanel doesn't clip an overflowing child by default —
+                                     without a Width/TextTrimming on the label itself, a wide
+                                     date ran into the neighbouring bar's label instead of being
+                                     cut off cleanly. -->
+                                <StackPanel Width="32" Margin="2,0" ToolTip.Tip="{Binding DayLabel}">
+                                    <!-- Fixed-height track so every bar's baseline lines up
+                                         regardless of its own height. -->
+                                    <Border Height="72">
+                                        <Border Height="{Binding BarHeight}" Width="14"
+                                                VerticalAlignment="Bottom" HorizontalAlignment="Center"
+                                                Background="{DynamicResource PalettePrimary}"
+                                                CornerRadius="3" />
+                                    </Border>
+                                    <TextBlock Text="{Binding DayLabel}" FontSize="9"
+                                               Foreground="{DynamicResource PaletteSecondary}"
+                                               HorizontalAlignment="Center" Margin="0,4,0,0"
+                                               Width="32" TextAlignment="Center"
+                                               TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </StackPanel>
+        </Border>
+
+        <!-- Whole-range totals per label — independent of the ComboBox filter above, which
+             only narrows the list further down. Only shown once there's an actual label to
+             break out; see HistoryViewModel.HasLabelBreakdown. -->
+        <Border Classes="card" IsVisible="{Binding HasLabelBreakdown}">
+            <StackPanel Spacing="6">
+                <TextBlock Text="By label" FontSize="12" FontWeight="SemiBold"
+                           Foreground="{DynamicResource PaletteSecondary}" />
+                <ItemsControl ItemsSource="{Binding LabelBreakdown}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="viewModels:LabelBreakdownEntry">
+                            <Grid ColumnDefinitions="*,Auto" Margin="0,2">
+                                <TextBlock Grid.Column="0" Text="{Binding Label}"
+                                           TextTrimming="CharacterEllipsis" />
+                                <TextBlock Grid.Column="1" Text="{Binding Summary}"
+                                           FontSize="11" Foreground="{DynamicResource PaletteSecondary}"
+                                           Margin="8,0,0,0" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </Border>
+
+        <TextBlock Text="{Binding EmptyStateText}"
+                   Foreground="{DynamicResource PaletteSecondary}"
+                   HorizontalAlignment="Center" Margin="0,16"
+                   IsVisible="{Binding NoEntries}" />
+
+        <!-- ListBox rather than a raw ItemsControl: this is the one place in the app the
+             list could genuinely grow large (history.jsonl has no cap — see the README's
+             own caveat about that), and ListBox virtualizes by default where a plain
+             ItemsControl inside a ScrollViewer would not. MaxHeight is what makes that
+             virtualization actually pay off here: without a bounded viewport the panel
+             would just measure every realized item anyway, on a page that otherwise flows
+             and scrolls as a whole inside MainWindow's own ScrollViewer. -->
+        <ListBox ItemsSource="{Binding Entries}"
+                 IsVisible="{Binding HasEntries}"
+                 Background="Transparent"
+                 BorderThickness="0"
+                 MaxHeight="320">
+            <ListBox.ItemTemplate>
+                <DataTemplate DataType="viewModels:HistoryEntry">
+                    <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto"
+                          Margin="0,4">
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding Mode}"
+                                   FontWeight="SemiBold" />
+                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Duration}"
+                                   FontWeight="SemiBold" />
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="{Binding When}"
+                                   FontSize="11" Foreground="{DynamicResource PaletteSecondary}" />
+                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Outcome}"
+                                   FontSize="11" Foreground="{DynamicResource PaletteSecondary}"
+                                   HorizontalAlignment="Right" />
+                        <TextBlock Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
+                                   Text="{Binding Label}" IsVisible="{Binding HasLabel}"
+                                   FontSize="11" FontStyle="Italic"
+                                   Foreground="{DynamicResource PaletteSecondary}"
+                                   TextWrapping="Wrap" Margin="0,2,0,0" />
+                    </Grid>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+    </StackPanel>
+</UserControl>

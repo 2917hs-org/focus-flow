@@ -7,8 +7,7 @@
         Icon="/Assets/app-icon.png"
         Width="600"
         Height="560"
-        MinWidth="520"
-        MinHeight="440"
+        CanResize="False"
         Background="{DynamicResource PaletteBackground}"
         Foreground="{DynamicResource PaletteText}">
 
@@ -21,14 +20,36 @@
             <Setter Property="CornerRadius" Value="10" />
             <Setter Property="Padding" Value="8" />
         </Style>
+        <!-- Same secondary Button look MainWindow/HistoryWindow use, since this window
+             doesn't share styles across window boundaries. -->
+        <Style Selector="Button.secondary">
+            <Setter Property="Background" Value="{DynamicResource PaletteSurface}" />
+            <Setter Property="Foreground" Value="{DynamicResource PaletteText}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PaletteBorder}" />
+        </Style>
+        <Style Selector="Button.secondary:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource PaletteBackground}" />
+            <Setter Property="Foreground" Value="{DynamicResource PaletteText}" />
+        </Style>
+        <Style Selector="Button.secondary:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource PaletteBorder}" />
+            <Setter Property="Foreground" Value="{DynamicResource PaletteText}" />
+        </Style>
     </Window.Styles>
 
     <!-- Two columns, roughly 53/47 (the blocked list's share taken down ~20% relative from
          an earlier 65/35): the blocked list still gets the larger half since it's the thing
          being reviewed and acted on, but the add-apps panel needed more than a third to show
          its checklist comfortably. -->
-    <Grid Margin="24" RowDefinitions="Auto,*" RowSpacing="16" ColumnDefinitions="8*,7*" ColumnSpacing="20">
-        <StackPanel Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" Spacing="4">
+    <Grid Margin="24" RowDefinitions="Auto,Auto,*" RowSpacing="16" ColumnDefinitions="8*,7*" ColumnSpacing="20">
+        <!-- "‹ Back" hides this window and brings MainWindow forward (see
+             BlockedAppsWindow.axaml.cs's NavigateBackRequested) — a genuinely separate,
+             differently-sized window from MainWindow, but this keeps switching between
+             them feeling like staying inside one app. -->
+        <Button Grid.Row="0" Grid.Column="0" Content="‹ Back" Classes="secondary"
+                HorizontalAlignment="Left" Click="OnBackClick" />
+
+        <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Spacing="4">
             <TextBlock Text="Blocked Apps" FontSize="18" FontWeight="SemiBold" />
             <TextBlock Text="Hidden and replaced by FocusFlow the moment one of these comes to the front during a session."
                        Foreground="{DynamicResource PaletteSecondary}"
@@ -38,7 +59,7 @@
         <!-- Left: currently-blocked list. A checkbox per row rather than ListBox multi-
              select — plain clicks select more than one, no Ctrl/Cmd- or Shift-click needed —
              the same pattern the picker on the right uses. -->
-        <Grid Grid.Row="1" Grid.Column="0" RowDefinitions="Auto,*,Auto" RowSpacing="8">
+        <Grid Grid.Row="2" Grid.Column="0" RowDefinitions="Auto,*,Auto" RowSpacing="8">
             <TextBlock Grid.Row="0" Text="Currently blocked" FontSize="11"
                        Foreground="{DynamicResource PaletteSecondary}" />
 
@@ -74,7 +95,7 @@
         <!-- Right: add apps. Always visible rather than behind a dropdown/popup — with two
              columns there's finally room for the checklist itself, so nothing needs hiding
              behind a click first. -->
-        <Grid Grid.Row="1" Grid.Column="1" RowDefinitions="Auto,Auto,*,Auto,Auto,Auto" RowSpacing="8">
+        <Grid Grid.Row="2" Grid.Column="1" RowDefinitions="Auto,Auto,*,Auto,Auto,Auto" RowSpacing="8">
             <TextBox Grid.Row="0" Text="{Binding AppSearchText, Mode=TwoWay}"
                      PlaceholderText="Search apps…" />
 

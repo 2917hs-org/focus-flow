@@ -5,19 +5,23 @@
         x:DataType="viewModels:MainWindowViewModel"
         Title="FocusFlow"
         Icon="/Assets/app-icon.png"
-        Width="420"
-        SizeToContent="Height"
-        MinWidth="400"
-        MinHeight="200"
+        Width="600"
+        Height="560"
+        CanResize="False"
         Background="{DynamicResource PaletteBackground}"
         Foreground="{DynamicResource PaletteText}">
 
     <Window.Styles>
-        <!-- Sized so the widest combination — Start, Break, Resume, Skip, Reset, Stop —
-             still fits one line inside MinWidth. -->
+        <!-- Transport is now a vertical column next to the timer rather than a horizontal
+             row under it, so width no longer needs to fit the widest combination on one
+             line — but Button's own Fluent default (HorizontalAlignment="Left") would still
+             leave every button sized to its own text, "Resume" wider than "Stop" wider than
+             "Skip", instead of one even column. Stretch makes every button match the
+             StackPanel's own width, which itself is already sized to the widest of them. -->
         <Style Selector="StackPanel#Transport > Button">
             <Setter Property="Padding" Value="9,5" />
             <Setter Property="FontSize" Value="12" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
         </Style>
 
         <!-- Every settings group below is one of these: a Surface-coloured card rather
@@ -31,7 +35,7 @@
             <Setter Property="BorderBrush" Value="{DynamicResource PaletteBorder}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius" Value="10" />
-            <Setter Property="Padding" Value="16" />
+            <Setter Property="Padding" Value="12" />
         </Style>
 
         <!-- Each card's "More … options" Expander is the progressive-disclosure half of
@@ -43,92 +47,127 @@
              corner-radius and Slider-height fixes elsewhere in this session both came
              from guessing at Fluent's internals and needing a second pass to get right,
              and a plain Margin here gets the same "give it some breathing room" result
-             without that risk. -->
+             without that risk. HorizontalAlignment is the one thing that does need
+             overriding, though: Fluent's own Expander ControlTheme defaults it to Left, so
+             the header bar shrink-wraps to its own text/chevron instead of matching the
+             full-width fields above it, leaving a strip of bare card background to its
+             right that Stretch elsewhere in these cards doesn't have. -->
         <Style Selector="Expander">
             <Setter Property="Margin" Value="0,4,0,0" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+        </Style>
+
+        <!-- HorizontalContentAlignment="Center" on an editable ComboBox only repositions the
+             whole edit box within its layout cell — it doesn't touch the digit's own
+             TextAlignment inside that box, which Fluent's ComboBox template never exposes as
+             a bindable property. Reaching into the named template part directly is the only
+             way to actually centre the glyph, same technique the button pointer-over/pressed
+             overrides above already use for their own template parts. -->
+        <Style Selector="ComboBox.centered-value /template/ TextBox#PART_EditableTextBox">
+            <Setter Property="TextAlignment" Value="Center" />
         </Style>
     </Window.Styles>
 
-    <StackPanel x:Name="Root" Margin="24" Spacing="16">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+    <StackPanel x:Name="Root" Margin="24" Spacing="12">
 
-        <!-- Countdown, with the history icon tucked in the top-right corner rather than a
-             labelled button of its own — same glyph the tray menu already uses for the
-             same action, so it doesn't introduce a new visual vocabulary. -->
-        <Grid>
-            <StackPanel Spacing="4">
-                <TextBlock Text="{Binding CurrentTime}"
-                           FontSize="46"
-                           FontWeight="Light"
-                           Foreground="{Binding ModeBrush}"
-                           HorizontalAlignment="Center" />
-                <TextBlock Text="{Binding StatusText}"
-                           Foreground="{DynamicResource PaletteSecondary}"
-                           HorizontalAlignment="Center" />
+        <!-- Timer/status/ring/label on the left, transport stacked vertically on the
+             right — two columns instead of everything stacked in one, so the buttons read
+             as a single console beside the glance info rather than a row underneath it. -->
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+            <StackPanel Grid.Column="0" Spacing="8">
+
+                <!-- Countdown, with the history icon tucked in the top-right corner rather
+                     than a labelled button of its own — same glyph the tray menu already
+                     uses for the same action, so it doesn't introduce a new visual
+                     vocabulary. -->
+                <Grid>
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="{Binding CurrentTime}"
+                                   FontSize="46"
+                                   FontWeight="Light"
+                                   Foreground="{Binding ModeBrush}"
+                                   HorizontalAlignment="Center" />
+                        <TextBlock Text="{Binding StatusText}"
+                                   Foreground="{DynamicResource PaletteSecondary}"
+                                   HorizontalAlignment="Center" />
+                    </StackPanel>
+
+                    <Button Content="▤" Command="{Binding ShowHistoryCommand}"
+                            HorizontalAlignment="Right" VerticalAlignment="Top"
+                            Padding="6,2" FontSize="14"
+                            ToolTip.Tip="View History" />
+                </Grid>
+
+                <!-- Daily goal ring: a plain Ellipse track behind an Arc whose SweepAngle is
+                     precomputed in the ViewModel (FR-016), same "give XAML a ready-to-bind
+                     value" approach as ManageBlockedAppsLabel below. StartAngle=-90 puts the
+                     sweep's zero point at 12 o'clock rather than Arc's own 3-o'clock
+                     default, so it reads like a normal progress ring; SweepAngle is already
+                     clamped to a 0-360 range so a goal blown past still closes into a full
+                     circle instead of overshooting. Both shapes deflate their own geometry
+                     by StrokeThickness/2 (Avalonia's own Arc/Ellipse behaviour, verified
+                     against source rather than assumed), so the ring fills this Grid cell
+                     cleanly with no clipping or extra margin needed. Moves live, once a
+                     second — see MainWindowViewModel.UpdateGoalRing — rather than only
+                     jumping when a session ends. The goal itself is set from the Sessions
+                     card below, alongside the other set-once-and-forget numbers, not here:
+                     this row is read-only glance space, not another control competing for
+                     it. -->
+                <!-- Auto, not *, for the text column: a star column claims all left-over row
+                     width regardless of how short TodaySummary's text actually is, which
+                     left the ring sitting in a lot of dead space instead of reading as one
+                     compact, centred unit. -->
+                <Grid ColumnDefinitions="Auto,Auto" ColumnSpacing="14" HorizontalAlignment="Center">
+                    <Grid Grid.Column="0" Width="60" Height="60">
+                        <Ellipse Stroke="{DynamicResource PaletteBorder}" StrokeThickness="6" />
+                        <Arc StartAngle="-90" SweepAngle="{Binding GoalProgressSweepAngle}"
+                             Stroke="{DynamicResource PalettePrimary}" StrokeThickness="6"
+                             StrokeLineCap="Round" />
+                        <TextBlock Text="{Binding GoalProgressPercentText}"
+                                   FontSize="12" FontWeight="SemiBold"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Grid>
+
+                    <TextBlock Grid.Column="1" Text="{Binding TodaySummary}"
+                               Foreground="{DynamicResource PaletteSecondary}" FontSize="12"
+                               MaxWidth="220" TextWrapping="Wrap" VerticalAlignment="Center" />
+                </Grid>
+
+                <!-- Captured into the history record when Start is pressed; see
+                     MainWindowViewModel.Start. Free text, no managed tag list. Deliberately
+                     smaller than a normal input — FontSize/Padding trimmed down — so an
+                     optional one-line note doesn't compete visually with Start/Break beside
+                     it. -->
+                <TextBox Text="{Binding SessionLabel}"
+                         PlaceholderText="Label this session (optional)"
+                         FontSize="12" Padding="8,5"
+                         HorizontalAlignment="Stretch" />
             </StackPanel>
 
-            <Button Content="▤" Command="{Binding ShowHistoryCommand}"
-                    HorizontalAlignment="Right" VerticalAlignment="Top"
-                    Padding="6,2" FontSize="14"
-                    ToolTip.Tip="View History" />
+            <!-- Transport, vertical -->
+            <StackPanel x:Name="Transport" Grid.Column="1" Orientation="Vertical"
+                        VerticalAlignment="Center" Spacing="6">
+                <Button Content="Start" Classes="success" Command="{Binding StartCommand}"
+                        ToolTip.Tip="{Binding StartPauseHotkeyTooltip}" />
+                <Button Content="Break" Classes="info" Command="{Binding StartBreakCommand}" />
+                <Button Content="Pause" Classes="warning" Command="{Binding PauseCommand}"
+                        IsVisible="{Binding CanPauseNow}"
+                        ToolTip.Tip="{Binding StartPauseHotkeyTooltip}" />
+                <Button Content="Resume" Classes="success" Command="{Binding ResumeCommand}"
+                        IsVisible="{Binding IsPausedNow}"
+                        ToolTip.Tip="{Binding StartPauseHotkeyTooltip}" />
+                <Button Content="Skip" Command="{Binding SkipCommand}"
+                        ToolTip.Tip="{Binding SkipHotkeyTooltip}" />
+                <Button Content="Reset" Command="{Binding ResetCommand}" />
+                <Button Content="Stop" Classes="danger" Command="{Binding StopCommand}"
+                        ToolTip.Tip="{Binding StopHotkeyTooltip}" />
+            </StackPanel>
         </Grid>
-
-        <!-- Daily goal ring: a plain Ellipse track behind an Arc whose SweepAngle is
-             precomputed in the ViewModel (FR-016), same "give XAML a ready-to-bind value"
-             approach as ManageBlockedAppsLabel below. StartAngle=-90 puts the sweep's zero
-             point at 12 o'clock rather than Arc's own 3-o'clock default, so it reads like a
-             normal progress ring; SweepAngle is already clamped to a 0-360 range so a goal
-             blown past still closes into a full circle instead of overshooting. Both shapes
-             deflate their own geometry by StrokeThickness/2 (Avalonia's own Arc/Ellipse
-             behaviour, verified against source rather than assumed), so the ring fills this
-             Grid cell cleanly with no clipping or extra margin needed. Moves live, once a
-             second — see MainWindowViewModel.UpdateGoalRing — rather than only jumping when
-             a session ends. The goal itself is set from the Sessions card below, alongside
-             the other set-once-and-forget numbers, not here: this row is read-only glance
-             space, not another control competing for it. -->
-        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14" HorizontalAlignment="Center">
-            <Grid Grid.Column="0" Width="60" Height="60">
-                <Ellipse Stroke="{DynamicResource PaletteBorder}" StrokeThickness="6" />
-                <Arc StartAngle="-90" SweepAngle="{Binding GoalProgressSweepAngle}"
-                     Stroke="{DynamicResource PalettePrimary}" StrokeThickness="6"
-                     StrokeLineCap="Round" />
-                <TextBlock Text="{Binding GoalProgressPercentText}"
-                           FontSize="12" FontWeight="SemiBold"
-                           HorizontalAlignment="Center" VerticalAlignment="Center" />
-            </Grid>
-
-            <TextBlock Grid.Column="1" Text="{Binding TodaySummary}"
-                       Foreground="{DynamicResource PaletteSecondary}" FontSize="12"
-                       TextWrapping="Wrap" VerticalAlignment="Center" />
-        </Grid>
-
-        <!-- Captured into the history record when Start is pressed; see
-             MainWindowViewModel.Start. Free text, no managed tag list. -->
-        <TextBox Text="{Binding SessionLabel}"
-                 PlaceholderText="Label this session (optional)"
-                 HorizontalAlignment="Stretch" />
-
-        <!-- Transport -->
-        <StackPanel x:Name="Transport" Orientation="Horizontal"
-                    HorizontalAlignment="Center" Spacing="6">
-            <Button Content="Start" Classes="success" Command="{Binding StartCommand}"
-                    ToolTip.Tip="{Binding StartPauseHotkeyTooltip}" />
-            <Button Content="Break" Classes="info" Command="{Binding StartBreakCommand}" />
-            <Button Content="Pause" Classes="warning" Command="{Binding PauseCommand}"
-                    IsVisible="{Binding CanPauseNow}"
-                    ToolTip.Tip="{Binding StartPauseHotkeyTooltip}" />
-            <Button Content="Resume" Classes="success" Command="{Binding ResumeCommand}"
-                    IsVisible="{Binding IsPausedNow}"
-                    ToolTip.Tip="{Binding StartPauseHotkeyTooltip}" />
-            <Button Content="Skip" Command="{Binding SkipCommand}"
-                    ToolTip.Tip="{Binding SkipHotkeyTooltip}" />
-            <Button Content="Reset" Command="{Binding ResetCommand}" />
-            <Button Content="Stop" Classes="danger" Command="{Binding StopCommand}"
-                    ToolTip.Tip="{Binding StopHotkeyTooltip}" />
-        </StackPanel>
 
         <!-- Sessions card -->
         <Border Classes="card">
-            <StackPanel Spacing="12">
+            <StackPanel Spacing="10">
                 <TextBlock Text="Sessions" FontWeight="SemiBold" />
 
                 <!-- Paired on one row: two full-width spinners stacked took far more
@@ -154,7 +193,71 @@
                 </Grid>
 
                 <Expander Header="More session options">
-                    <StackPanel Spacing="12">
+                    <StackPanel Spacing="10">
+                        <!-- Value fields first, toggles below: these get looked up and changed
+                             far more often than the on/off switches underneath. Styled exactly
+                             like the always-visible Focus/Break fields above — label above a
+                             full-width, left-aligned dropdown — rather than the label-left/
+                             narrow-box/centred-text layout tried earlier, which looked
+                             inconsistent with the rest of the card sitting right above it. -->
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+                            <StackPanel Grid.Column="0" Spacing="4">
+                                <TextBlock Text="Sessions per run" />
+                                <ComboBox IsEditable="True"
+                                          ItemsSource="{Binding SessionCountPresets}"
+                                          Text="{Binding SessionCount, Mode=TwoWay}"
+                                          HorizontalAlignment="Stretch" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Spacing="4"
+                                        IsEnabled="{Binding ReminderEnabled}">
+                                <TextBlock Text="Remind before (min)" />
+                                <ComboBox IsEditable="True"
+                                          ItemsSource="{Binding ReminderLeadMinutePresets}"
+                                          Text="{Binding ReminderLeadMinutes, Mode=TwoWay}"
+                                          HorizontalAlignment="Stretch" />
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Daily goal (FR-016, feeds the ring above the transport buttons) and
+                             Pause-when-idle paired on one row, each a label over a compact
+                             control, matching Sessions/Remind above. -->
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+                            <StackPanel Grid.Column="0" Spacing="4">
+                                <TextBlock Text="Daily Goal" />
+                                <ComboBox IsEditable="True"
+                                          ItemsSource="{Binding DailyGoalPresets}"
+                                          Text="{Binding DailyGoalMinutes, Mode=TwoWay}"
+                                          HorizontalAlignment="Stretch" />
+                            </StackPanel>
+
+                            <!-- Pauses an active, unpaused session after this much idle time and
+                                 stays paused — it never auto-resumes, since activity returning
+                                 isn't proof the user is back to focusing. See IIdleTimeProvider.
+                                 The enable/disable checkbox is hidden (IsVisible="False"), not
+                                 removed: IdleAutoPauseEnabled still gates the dropdown exactly
+                                 as before, so the feature keeps working from whatever it was
+                                 last set to (true by default) — only the on-screen toggle is
+                                 gone. Flip IsVisible back to True to bring the toggle back;
+                                 drop the plain-text label below it at that point, since the
+                                 checkbox's own Content already reads the same. -->
+                            <StackPanel Grid.Column="1" Spacing="4">
+                                <CheckBox Content="Auto-pause when inactive" IsVisible="False"
+                                          IsChecked="{Binding IdleAutoPauseEnabled, Mode=TwoWay}" />
+                                <TextBlock Text="Auto-pause when inactive" />
+                                <Grid ColumnDefinitions="Auto,Auto" ColumnSpacing="6"
+                                      IsEnabled="{Binding IdleAutoPauseEnabled}">
+                                    <ComboBox Grid.Column="0" IsEditable="True"
+                                              Classes="centered-value"
+                                              ItemsSource="{Binding IdleAutoPauseMinutePresets}"
+                                              Text="{Binding IdleAutoPauseMinutes, Mode=TwoWay}"
+                                              HorizontalContentAlignment="Center"
+                                              Width="70" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="1" Text="min" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource PaletteSecondary}" />
+                                </Grid>
+                            </StackPanel>
+                        </Grid>
+
                         <Grid ColumnDefinitions="*,*" ColumnSpacing="12" RowDefinitions="Auto,Auto"
                               RowSpacing="6">
                             <CheckBox Grid.Row="0" Grid.Column="0" Content="Auto-start breaks"
@@ -166,51 +269,6 @@
                             <CheckBox Grid.Row="1" Grid.Column="1" Content="Remind before end"
                                       IsChecked="{Binding ReminderEnabled, Mode=TwoWay}" />
                         </Grid>
-
-                        <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
-                            <StackPanel Grid.Column="0" Spacing="4"
-                                        IsEnabled="{Binding IsSessionCountEnabled}">
-                                <TextBlock Text="Sessions per run" />
-                                <NumericUpDown Value="{Binding SessionCount, Mode=TwoWay}"
-                                               Minimum="1" Maximum="10" Increment="1" FormatString="0"
-                                               HorizontalAlignment="Stretch" />
-                            </StackPanel>
-                            <StackPanel Grid.Column="1" Spacing="4"
-                                        IsEnabled="{Binding ReminderEnabled}">
-                                <TextBlock Text="Remind before (min)" />
-                                <NumericUpDown Value="{Binding ReminderLeadMinutes, Mode=TwoWay}"
-                                               Minimum="1" Maximum="10" Increment="1" FormatString="0"
-                                               HorizontalAlignment="Stretch" />
-                            </StackPanel>
-                        </Grid>
-
-                        <!-- Pauses an active, unpaused session after this much idle time and
-                             stays paused — it never auto-resumes, since activity returning
-                             isn't proof the user is back to focusing. See IIdleTimeProvider. -->
-                        <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="8">
-                            <CheckBox Grid.Column="0" Content="Auto-pause when idle after"
-                                      IsChecked="{Binding IdleAutoPauseEnabled, Mode=TwoWay}"
-                                      VerticalAlignment="Center" />
-                            <ComboBox Grid.Column="1" IsEditable="True"
-                                      ItemsSource="{Binding IdleAutoPauseMinutePresets}"
-                                      Text="{Binding IdleAutoPauseMinutes, Mode=TwoWay}"
-                                      IsEnabled="{Binding IdleAutoPauseEnabled}"
-                                      Width="100" VerticalAlignment="Center" />
-                            <TextBlock Grid.Column="2" Text="min" VerticalAlignment="Center" Margin="4,0,0,0"
-                                       Foreground="{DynamicResource PaletteSecondary}" />
-                        </Grid>
-
-                        <!-- FR-016. Feeds the ring above the transport buttons — set-once-
-                             and-forget like the rest of this Expander, so it lives here
-                             rather than crowding the always-visible summary row. -->
-                        <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="8">
-                            <TextBlock Grid.Column="0" Text="Daily goal" VerticalAlignment="Center" />
-                            <NumericUpDown Grid.Column="1" Value="{Binding DailyGoalMinutes, Mode=TwoWay}"
-                                           Minimum="15" Maximum="720" Increment="15" FormatString="0"
-                                           Width="100" VerticalAlignment="Center" />
-                            <TextBlock Grid.Column="2" Text="min" VerticalAlignment="Center" Margin="4,0,0,0"
-                                       Foreground="{DynamicResource PaletteSecondary}" />
-                        </Grid>
                     </StackPanel>
                 </Expander>
             </StackPanel>
@@ -218,7 +276,7 @@
 
         <!-- Sound card -->
         <Border Classes="card">
-            <StackPanel Spacing="12">
+            <StackPanel Spacing="10">
                 <TextBlock Text="Sound" FontWeight="SemiBold" />
 
                 <StackPanel Spacing="4">
@@ -230,7 +288,7 @@
                                   SelectedItem="{Binding SelectedSound, Mode=TwoWay}">
                             <ComboBox.ItemTemplate>
                                 <DataTemplate>
-                                    <TextBlock Text="{Binding Name}" />
+                                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
                                 </DataTemplate>
                             </ComboBox.ItemTemplate>
                         </ComboBox>
@@ -259,7 +317,7 @@
                 </StackPanel>
 
                 <Expander Header="More sound options">
-                    <StackPanel Spacing="12">
+                    <StackPanel Spacing="10">
                         <CheckBox Content="Play music when a break ends"
                                   IsChecked="{Binding PlayMusicAfterBreak, Mode=TwoWay}" />
                         <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
@@ -280,12 +338,12 @@
                         <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
                             <ComboBox Grid.Column="0"
                                       HorizontalAlignment="Stretch"
-                                      PlaceholderText="No ambient sound selected"
+                                      PlaceholderText="Select"
                                       ItemsSource="{Binding AvailableAmbientSounds}"
                                       SelectedItem="{Binding SelectedAmbientSound, Mode=TwoWay}">
                                 <ComboBox.ItemTemplate>
                                     <DataTemplate>
-                                        <TextBlock Text="{Binding Name}" />
+                                        <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
                                     </DataTemplate>
                                 </ComboBox.ItemTemplate>
                             </ComboBox>
@@ -306,18 +364,16 @@
         <!-- Application card. No "More options" Expander here — Theme and Launch at
              login are the whole card, so there's nothing left to collapse. -->
         <Border Classes="card">
-            <StackPanel Spacing="12">
+            <StackPanel Spacing="10">
                 <TextBlock Text="Application" FontWeight="SemiBold" />
 
-                <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
-                    <StackPanel Grid.Column="0" Spacing="4">
-                        <TextBlock Text="Theme" />
-                        <ComboBox HorizontalAlignment="Stretch"
-                                  ItemsSource="{Binding AvailableThemes}"
-                                  SelectedItem="{Binding Theme, Mode=TwoWay}" />
-                    </StackPanel>
-                    <CheckBox Grid.Column="1" Content="Launch at login"
-                              VerticalAlignment="Bottom"
+                <Grid ColumnDefinitions="Auto,Auto,Auto" ColumnSpacing="8">
+                    <TextBlock Grid.Column="0" Text="Theme" VerticalAlignment="Center" />
+                    <ComboBox Grid.Column="1" Width="100" VerticalAlignment="Center"
+                              ItemsSource="{Binding AvailableThemes}"
+                              SelectedItem="{Binding Theme, Mode=TwoWay}" />
+                    <CheckBox Grid.Column="2" Content="Launch at login" Margin="8,0,0,0"
+                              VerticalAlignment="Center"
                               IsChecked="{Binding LaunchOnStartup, Mode=TwoWay}"
                               IsEnabled="{Binding IsStartupSupported}" />
                 </Grid>
@@ -335,20 +391,25 @@
              like the other cards' "More … options" content, so the rows themselves live in
              an Expander rather than sitting open by default. -->
         <Border Classes="card">
-            <StackPanel Spacing="12">
+            <StackPanel Spacing="10">
                 <TextBlock Text="Hotkeys" FontWeight="SemiBold" />
                 <TextBlock Text="Work even while FocusFlow isn't the focused app."
                            Foreground="{DynamicResource PaletteSecondary}"
                            FontSize="11" TextWrapping="Wrap" />
 
                 <Expander Header="More hotkey options">
-                    <StackPanel Spacing="12">
-                        <Grid ColumnDefinitions="Auto,*,Auto,Auto" RowDefinitions="Auto,Auto,Auto"
+                    <StackPanel Spacing="10">
+                        <!-- Column 1 is Auto, not *: a star column stretched the hotkey-display
+                             button across the rest of the card no matter how short its own
+                             text ("⌃⌥⌘P") was. MinWidth instead keeps all three buttons the
+                             same width — sized for the longest real value, Windows'
+                             "Ctrl+Alt+Shift+P" — without each claiming the full row. -->
+                        <Grid ColumnDefinitions="Auto,Auto,Auto,Auto" RowDefinitions="Auto,Auto,Auto"
                               ColumnSpacing="8" RowSpacing="8">
                             <TextBlock Grid.Row="0" Grid.Column="0" Text="Start / Pause" VerticalAlignment="Center" />
                             <Button Grid.Row="0" Grid.Column="1" Content="{Binding StartPauseHotkeyDisplay}"
                                     Command="{Binding BeginCaptureStartPauseHotkeyCommand}"
-                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" />
+                                    MinWidth="120" HorizontalAlignment="Left" HorizontalContentAlignment="Left" />
                             <CheckBox Grid.Row="0" Grid.Column="2" VerticalAlignment="Center"
                                       IsChecked="{Binding StartPauseHotkeyEnabled, Mode=TwoWay}" />
                             <Button Grid.Row="0" Grid.Column="3" Content="Reset" FontSize="10" Padding="6,2"
@@ -357,7 +418,7 @@
                             <TextBlock Grid.Row="1" Grid.Column="0" Text="Stop" VerticalAlignment="Center" />
                             <Button Grid.Row="1" Grid.Column="1" Content="{Binding StopHotkeyDisplay}"
                                     Command="{Binding BeginCaptureStopHotkeyCommand}"
-                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" />
+                                    MinWidth="120" HorizontalAlignment="Left" HorizontalContentAlignment="Left" />
                             <CheckBox Grid.Row="1" Grid.Column="2" VerticalAlignment="Center"
                                       IsChecked="{Binding StopHotkeyEnabled, Mode=TwoWay}" />
                             <Button Grid.Row="1" Grid.Column="3" Content="Reset" FontSize="10" Padding="6,2"
@@ -366,7 +427,7 @@
                             <TextBlock Grid.Row="2" Grid.Column="0" Text="Skip" VerticalAlignment="Center" />
                             <Button Grid.Row="2" Grid.Column="1" Content="{Binding SkipHotkeyDisplay}"
                                     Command="{Binding BeginCaptureSkipHotkeyCommand}"
-                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" />
+                                    MinWidth="120" HorizontalAlignment="Left" HorizontalContentAlignment="Left" />
                             <CheckBox Grid.Row="2" Grid.Column="2" VerticalAlignment="Center"
                                       IsChecked="{Binding SkipHotkeyEnabled, Mode=TwoWay}" />
                             <Button Grid.Row="2" Grid.Column="3" Content="Reset" FontSize="10" Padding="6,2"
@@ -387,7 +448,7 @@
              BlockedAppsWindow — this card is just the entry point and the permission status,
              the same split MainWindow already uses for session history. -->
         <Border Classes="card">
-            <StackPanel Spacing="12">
+            <StackPanel Spacing="10">
                 <TextBlock Text="App Blocking" FontWeight="SemiBold" />
                 <TextBlock Text="Hide these apps and bring FocusFlow forward if you switch to them during a focus session."
                            Foreground="{DynamicResource PaletteSecondary}"
@@ -410,4 +471,5 @@
                    Foreground="{DynamicResource PaletteSecondary}"
                    FontSize="11" TextWrapping="Wrap" />
     </StackPanel>
+    </ScrollViewer>
 </Window>

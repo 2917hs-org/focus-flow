@@ -124,6 +124,13 @@ public partial class App : Avalonia.Application
                 window.Hide();
             };
 
+            // Fires once the native window actually exists, and only once — the
+            // suppressed-animation setting lives on that same native window, which the
+            // Hide()/Show() cycle above reuses rather than recreating, so this doesn't
+            // need to run again on every later appearance.
+            window.Opened += (sender, e) =>
+                _provider!.GetRequiredService<IWindowAnimationService>().DisableShowHideAnimation(window);
+
             // Accessibility permission can be granted in System Settings while the app is
             // running, with no notification back to us — re-check whenever the window
             // regains focus, which covers the "went to grant it, came back" path.
@@ -143,11 +150,20 @@ public partial class App : Avalonia.Application
 
             desktop.MainWindow = window;
 
+            // Assigning MainWindow makes the classic desktop lifetime show it automatically
+            // once initialization finishes, but with its own default placement — not
+            // primary-screen-aware, and not the same spot ShowCentered puts every later
+            // appearance of this same window. Showing it here instead means the very first
+            // appearance lands consistently with every later one.
+            _placement?.ShowCentered(window);
+
             // A standalone widget rather than part of MainWindow: it has to stay on top
             // and visible even while MainWindow is hidden to the tray, which is the
             // normal state once a session is running.
             _miniTimerWindow = new MiniTimerWindow { DataContext = viewModel };
             WireMiniTimer(viewModel);
+
+            PrewarmSecondaryWindows();
 
             WireTray(viewModel);
             WireGlobalHotkeys(viewModel);
@@ -164,7 +180,7 @@ public partial class App : Avalonia.Application
             if (InstanceGuard is not null)
             {
                 InstanceGuard.ActivationRequested += (sender, e) =>
-                    Dispatcher.UIThread.Post(() => _placement?.ShowOnActiveScreen(window));
+                    Dispatcher.UIThread.Post(ShowMainWindow);
             }
 
             // Disposing the container flushes the debounced settings write, writes a
@@ -245,13 +261,7 @@ public partial class App : Avalonia.Application
         tray.ResetRequested += (sender, e) => Run(viewModel.ResetCommand);
         tray.StopRequested += (sender, e) => Run(viewModel.StopCommand);
 
-        tray.OpenRequested += (sender, e) => Dispatcher.UIThread.Post(() =>
-        {
-            if (_mainWindow is not null)
-            {
-                _placement?.ShowOnActiveScreen(_mainWindow);
-            }
-        });
+        tray.OpenRequested += (sender, e) => Dispatcher.UIThread.Post(ShowMainWindow);
 
         tray.ShowHistoryRequested += (sender, e) => Dispatcher.UIThread.Post(ShowHistory);
 
@@ -306,27 +316,100 @@ public partial class App : Avalonia.Application
     }
 
     /// <summary>
-    /// Created lazily, unlike MiniTimerWindow: this is an occasionally-opened report, not
-    /// something that needs to exist before the user has ever asked for it. Reused rather
-    /// than recreated on every open so <see cref="HistoryViewModel"/>'s selected range
-    /// survives between visits in the same run.
+    /// Creates and immediately hides HistoryWindow/BlockedAppsWindow — unlike MiniTimerWindow
+    /// (which is genuinely needed from the moment a session starts), neither is needed until
+    /// the user asks for it, but each still needs to exist this early: their Opened handler is
+    /// what sets NSWindowAnimationBehaviorNone, and setting that during the same Show() call
+    /// that's already playing the default animation loses the race — the fade had already
+    /// started by the time Opened fired. Doing that here, once, well before either window's
+    /// first real appearance, is what makes the very first open animation-free too, not just
+    /// every one after it. ShowActivated=false plus an immediate Hide() creates the native
+    /// window without stealing focus from MainWindow or (in practice, run back-to-back like
+    /// this) surviving to a rendered frame.
+    /// </summary>
+    private void PrewarmSecondaryWindows()
+    {
+        _historyWindow = CreateHistoryWindow();
+        PrewarmWindow(_historyWindow);
+
+        _blockedAppsWindow = CreateBlockedAppsWindow();
+        PrewarmWindow(_blockedAppsWindow);
+    }
+
+    private static void PrewarmWindow(Window window)
+    {
+        window.ShowActivated = false;
+        window.Show();
+        window.Hide();
+        window.ShowActivated = true;
+    }
+
+    private HistoryWindow CreateHistoryWindow()
+    {
+        var window = new HistoryWindow
+        {
+            DataContext = _provider!.GetRequiredService<HistoryViewModel>()
+        };
+
+        window.Closing += (sender, e) =>
+        {
+            e.Cancel = true;
+            window.Hide();
+        };
+
+        // Same reasoning as MainWindow's own Opened handler above.
+        window.Opened += (sender, e) =>
+            _provider!.GetRequiredService<IWindowAnimationService>().DisableShowHideAnimation(window);
+
+        // "‹ Back" or Escape — same as closing the window, but also brings MainWindow
+        // forward, so leaving History reads as returning to the app's home screen rather
+        // than just dismissing a report.
+        window.NavigateBackRequested += (sender, e) =>
+        {
+            window.Hide();
+            ShowMainWindow();
+        };
+
+        return window;
+    }
+
+    private BlockedAppsWindow CreateBlockedAppsWindow()
+    {
+        var window = new BlockedAppsWindow
+        {
+            DataContext = _provider!.GetRequiredService<BlockedAppsViewModel>()
+        };
+
+        window.Closing += (sender, e) =>
+        {
+            e.Cancel = true;
+            window.Hide();
+        };
+
+        // Same reasoning as MainWindow's own Opened handler above.
+        window.Opened += (sender, e) =>
+            _provider!.GetRequiredService<IWindowAnimationService>().DisableShowHideAnimation(window);
+
+        // Same reasoning as HistoryWindow.NavigateBackRequested above.
+        window.NavigateBackRequested += (sender, e) =>
+        {
+            window.Hide();
+            ShowMainWindow();
+        };
+
+        return window;
+    }
+
+    /// <summary>
+    /// PrewarmSecondaryWindows already created this — reused rather than recreated on every
+    /// open so <see cref="HistoryViewModel"/>'s selected range survives between visits in the
+    /// same run.
     /// </summary>
     private void ShowHistory()
     {
         if (_historyWindow is null)
         {
-            var window = new HistoryWindow
-            {
-                DataContext = _provider!.GetRequiredService<HistoryViewModel>()
-            };
-
-            window.Closing += (sender, e) =>
-            {
-                e.Cancel = true;
-                window.Hide();
-            };
-
-            _historyWindow = window;
+            return;
         }
 
         // Picks up anything logged since the window was last opened.
@@ -336,34 +419,39 @@ public partial class App : Avalonia.Application
             viewModel.RefreshCommand.Execute(null);
         }
 
-        _placement?.ShowOnActiveScreen(_historyWindow);
+        // Same spot MainWindow itself opens in — all three windows sharing one fixed
+        // position, on top of already sharing one size, is what actually sells "this feels
+        // like one app" rather than three windows that happen to be the same shape.
+        _placement?.ShowCentered(_historyWindow);
     }
 
     /// <summary>
-    /// Created lazily and reused, same reasoning as <see cref="ShowHistory"/>: an
-    /// occasionally-opened management window, not something needed before the user has
-    /// ever asked for it, and reused so BlockedAppsViewModel's picker state (search text,
-    /// which checkboxes are ticked) survives between visits in the same run.
+    /// PrewarmSecondaryWindows already created this — reused rather than recreated on every
+    /// open so BlockedAppsViewModel's picker state (search text, which checkboxes are ticked)
+    /// survives between visits in the same run.
     /// </summary>
     private void ShowBlockedApps()
     {
         if (_blockedAppsWindow is null)
         {
-            var window = new BlockedAppsWindow
-            {
-                DataContext = _provider!.GetRequiredService<BlockedAppsViewModel>()
-            };
-
-            window.Closing += (sender, e) =>
-            {
-                e.Cancel = true;
-                window.Hide();
-            };
-
-            _blockedAppsWindow = window;
+            return;
         }
 
-        _placement?.ShowOnActiveScreen(_blockedAppsWindow);
+        // Same reasoning as ShowHistory above.
+        _placement?.ShowCentered(_blockedAppsWindow);
+    }
+
+    /// <summary>
+    /// All three windows (this one, History, BlockedApps — see ShowHistory/ShowBlockedApps
+    /// above) open centred on the primary display via the same ShowCentered call, so
+    /// switching between them never means the next one landing somewhere different.
+    /// </summary>
+    private void ShowMainWindow()
+    {
+        if (_mainWindow is not null)
+        {
+            _placement?.ShowCentered(_mainWindow);
+        }
     }
 
     /// <summary>
@@ -430,20 +518,20 @@ public partial class App : Avalonia.Application
         services.AddSingleton<INotificationService, WindowsNotificationService>();
         services.AddSingleton<IAudioPlayer, WindowsAudioPlayer>();
         services.AddSingleton<IStartupService, WindowsStartupService>();
-        services.AddSingleton<IPointerLocator, WindowsPointerLocator>();
         services.AddSingleton<IIdleTimeProvider, WindowsIdleTimeProvider>();
         services.AddSingleton<IMenuBarCountdown, NoopMenuBarCountdown>();
         services.AddSingleton<IAppBlockingMonitor, NoopAppBlockingMonitor>();
         services.AddSingleton<IGlobalHotkeys, WindowsGlobalHotkeys>();
+        services.AddSingleton<IWindowAnimationService, NoopWindowAnimationService>();
 #else
         services.AddSingleton<INotificationService, MacNotificationService>();
         services.AddSingleton<IAudioPlayer, MacAudioPlayer>();
         services.AddSingleton<IStartupService, MacStartupService>();
-        services.AddSingleton<IPointerLocator, MacPointerLocator>();
         services.AddSingleton<IIdleTimeProvider, MacIdleTimeProvider>();
         services.AddSingleton<IMenuBarCountdown, NativeMenuBarCountdown>();
         services.AddSingleton<IAppBlockingMonitor, MacAppBlockingMonitor>();
         services.AddSingleton<IGlobalHotkeys, MacGlobalHotkeys>();
+        services.AddSingleton<IWindowAnimationService, MacWindowAnimationService>();
 #endif
 
         services.AddSingleton<MainWindowViewModel>();

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using Avalonia.Data.Converters;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using FocusFlow.Application.Services;
@@ -15,6 +16,24 @@ public enum HistoryRange
     ThisWeek,
     ThisMonth,
     AllTime
+}
+
+/// <summary>
+/// Words a user would actually read for each <see cref="HistoryRange"/> member, for the
+/// range ComboBox's ItemTemplate in HistoryView.axaml — enum names are for code, and
+/// "ThisWeek" rendered as the ComboBox's own ToString() fallback rather than "This Week".
+/// </summary>
+public static class HistoryRangeDisplay
+{
+    public static readonly IValueConverter Converter =
+        new FuncValueConverter<HistoryRange, string>(range => range switch
+        {
+            HistoryRange.Today => "Today",
+            HistoryRange.ThisWeek => "This Week",
+            HistoryRange.ThisMonth => "This Month",
+            HistoryRange.AllTime => "All Time",
+            _ => range.ToString()
+        });
 }
 
 /// <summary>One row in the history list — pre-formatted so the view needs no converters.</summary>
@@ -159,6 +178,13 @@ public partial class HistoryViewModel : ObservableObject
                 _ => $"Current streak: {streak} days"
             };
 
+            // Clearing AvailableLabelFilters below drops the ComboBox's current selection —
+            // SelectedItem is two-way bound, so Avalonia pushes that loss straight back into
+            // SelectedLabelFilter as null. Restored explicitly once the collection is rebuilt,
+            // rather than left for the ComboBox to sort out on its own, which is what used to
+            // leave the filter permanently blank after the first Refresh().
+            var previousFilter = SelectedLabelFilter;
+
             AvailableLabelFilters.Clear();
             AvailableLabelFilters.Add(AllLabelsOption);
             LabelBreakdown.Clear();
@@ -168,6 +194,10 @@ public partial class HistoryViewModel : ObservableObject
                 LabelBreakdown.Add(new LabelBreakdownEntry(
                     total.Label ?? NoLabelOption, FormatDuration(total.TotalTime), total.SessionCount));
             }
+
+            SelectedLabelFilter = AvailableLabelFilters.Contains(previousFilter)
+                ? previousFilter
+                : AllLabelsOption;
 
             // A lone "No label" row would just restate the summary above in a second card —
             // only worth showing once there's an actual label to compare it against.
