@@ -202,6 +202,27 @@ public class RequirementsTests
         Assert.Equal(0, new TimerConfig { AlarmVolume = -20 }.Normalized().AlarmVolume);
     }
 
+    // ---- Ambient sound ----------------------------------------------------------------
+
+    [Fact]
+    public void AmbientVolumeIsClampedToZeroThroughOneHundred()
+    {
+        Assert.Equal(100, new TimerConfig { AmbientVolume = 500 }.Normalized().AmbientVolume);
+        Assert.Equal(0, new TimerConfig { AmbientVolume = -20 }.Normalized().AmbientVolume);
+    }
+
+    [Fact]
+    public void AmbientSound_ABlankPathAlsoTurnsOffTheEnabledFlag()
+    {
+        // Same reasoning as MusicPath/PlayMusicAfterBreak: an enabled flag with nothing to
+        // play is meaningless, so normalization collapses both rather than leaving a
+        // checkbox that's on but silently does nothing.
+        var normalized = new TimerConfig { AmbientSoundEnabled = true, AmbientSoundPath = "   " }.Normalized();
+
+        Assert.Null(normalized.AmbientSoundPath);
+        Assert.False(normalized.AmbientSoundEnabled);
+    }
+
     // ---- FR-013: restore ------------------------------------------------------------
 
     [Fact]

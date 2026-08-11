@@ -57,6 +57,25 @@ public class ConfigPersistenceTests : IDisposable
     }
 
     [Fact]
+    public void SaveThenLoad_RoundTripsAmbientSoundFields()
+    {
+        var storage = new JsonConfigStorage(ConfigPath);
+        var saved = new TimerConfig
+        {
+            AmbientSoundEnabled = true,
+            AmbientSoundPath = "/Users/test/Sounds/rain.mp3",
+            AmbientVolume = 35
+        };
+
+        storage.Save(saved);
+        var loaded = storage.Load();
+
+        Assert.True(loaded.AmbientSoundEnabled);
+        Assert.Equal(saved.AmbientSoundPath, loaded.AmbientSoundPath);
+        Assert.Equal(35, loaded.AmbientVolume);
+    }
+
+    [Fact]
     public void SaveThenLoad_RoundTripsBlockedAppIds()
     {
         var storage = new JsonConfigStorage(ConfigPath);

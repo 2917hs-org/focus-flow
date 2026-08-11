@@ -48,8 +48,19 @@
 
     <ItemGroup>
         <!-- The .ico is a build input for ApplicationIcon, not something the app loads at
-             runtime, so it should not also be embedded as a resource. -->
-        <AvaloniaResource Include="Assets/**" Exclude="Assets/*.ico" />
+             runtime, so it should not also be embedded as a resource. Ambient/** is
+             excluded too: afplay/MCI need a real filesystem path, not an avares:// URI
+             into the assembly, so those ship as loose files below instead. -->
+        <AvaloniaResource Include="Assets/**" Exclude="Assets/*.ico;Assets/Ambient/**" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- Bundled ambient sound presets (synthesized noise, not recordings — see
+             MacAudioPlayer/WindowsAudioPlayer DiscoverAmbientSounds). Copied verbatim into
+             the publish output, which package.sh/the portable-zip step then carries into
+             FocusFlow.app/Contents/MacOS or the Windows publish folder unmodified, so
+             AppContext.BaseDirectory resolves them at runtime on both platforms. -->
+        <None Include="Assets/Ambient/**" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
 
     <ItemGroup>

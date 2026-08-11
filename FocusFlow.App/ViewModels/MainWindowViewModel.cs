@@ -64,6 +64,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     [ObservableProperty] private int _alarmVolume;
     [ObservableProperty] private string? _musicPath;
     [ObservableProperty] private bool _playMusicAfterBreak;
+    [ObservableProperty] private bool _ambientSoundEnabled;
+    [ObservableProperty] private AlarmSound? _selectedAmbientSound;
+    [ObservableProperty] private int _ambientVolume;
     [ObservableProperty] private bool _launchOnStartup;
     [ObservableProperty] private AppTheme _theme;
     [ObservableProperty] private bool _reminderEnabled;
@@ -146,6 +149,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _globalHotkeys = globalHotkeys;
 
         AvailableSounds = new ObservableCollection<AlarmSound>(audioPlayer.AvailableSounds);
+        AvailableAmbientSounds = new ObservableCollection<AlarmSound>(audioPlayer.AvailableAmbientSounds);
 
         LoadFromSettings();
         RefreshAppBlockingSupport();
@@ -166,6 +170,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     public ObservableCollection<AlarmSound> AvailableSounds { get; }
+
+    /// <summary>Bundled ambient presets plus, once browsed to, a synthetic entry for a
+    /// custom file — see <see cref="ResolveSound"/>.</summary>
+    public ObservableCollection<AlarmSound> AvailableAmbientSounds { get; }
 
     public IReadOnlyList<AppTheme> AvailableThemes { get; } =
         [AppTheme.System, AppTheme.Light, AppTheme.Dark];
@@ -220,13 +228,16 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             AlarmVolume = config.AlarmVolume;
             MusicPath = config.MusicPath;
             PlayMusicAfterBreak = config.PlayMusicAfterBreak;
+            AmbientSoundEnabled = config.AmbientSoundEnabled;
+            AmbientVolume = config.AmbientVolume;
             Theme = config.Theme;
             ReminderEnabled = config.ReminderEnabled;
             ReminderLeadMinutes = Math.Max(1, (int)Math.Round(config.ReminderLeadTime.TotalMinutes));
             IdleAutoPauseEnabled = config.IdleAutoPauseEnabled;
             IdleAutoPauseMinutes = Math.Max(1, (int)Math.Round(config.IdleAutoPauseThreshold.TotalMinutes));
             DailyGoalMinutes = config.DailyGoalMinutes;
-            SelectedSound = ResolveSound(config.AlarmSoundPath);
+            SelectedSound = ResolveSound(config.AlarmSoundPath, AvailableSounds, AvailableSounds.FirstOrDefault());
+            SelectedAmbientSound = ResolveSound(config.AmbientSoundPath, AvailableAmbientSounds, blankResult: null);
 
             // Trust the OS over the config file: the user may have removed the login item
             // outside the app, and the checkbox should reflect reality.
@@ -243,12 +254,15 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Finds the stored sound in the built-in list, adding an entry for a custom file so
-    /// the picker can show what is actually selected.
+    /// Finds the stored sound in <paramref name="source"/>, adding an entry for a custom
+    /// file so the picker can show what is actually selected. <paramref name="blankResult"/>
+    /// is what a blank/missing stored value resolves to — the platform default entry for
+    /// the alarm list (its Value is itself null, so this is really "no match, but blank
+    /// still means something"), or null for the ambient list, which has no such entry.
     /// </summary>
-    private AlarmSound? ResolveSound(string? value)
+    private static AlarmSound? ResolveSound(string? value, ObservableCollection<AlarmSound> source, AlarmSound? blankResult)
     {
-        var match = AvailableSounds.FirstOrDefault(s => s.Value == value);
+        var match = source.FirstOrDefault(s => s.Value == value);
         if (match is not null)
         {
             return match;
@@ -256,11 +270,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
         if (string.IsNullOrWhiteSpace(value))
         {
-            return AvailableSounds.FirstOrDefault();
+            return blankResult;
         }
 
         var custom = new AlarmSound(Path.GetFileName(value), value);
-        AvailableSounds.Add(custom);
+        source.Add(custom);
         return custom;
     }
 
@@ -349,6 +363,69 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     partial void OnMusicPathChanged(string? value) => Persist(c => c.MusicPath = value);
 
     partial void OnPlayMusicAfterBreakChanged(bool value) => Persist(c => c.PlayMusicAfterBreak = value);
+
+    // Each also re-syncs the live ambient loop rather than waiting for the next tick, so
+    // flipping the checkbox mid-session takes effect immediately — same reasoning as
+    // OnDailyGoalMinutesChanged above. UpdateAmbientPlayback() only reacts to the loop's
+    // on/off *decision* changing (see its own remarks) — it is not enough on its own for
+    // OnSelectedAmbientSoundChanged/OnAmbientVolumeChanged below, where the decision to
+    // play stays "yes" but *what* to play changes.
+    partial void OnAmbientSoundEnabledChanged(bool value)
+    {
+        Persist(c => c.AmbientSoundEnabled = value);
+        UpdateAmbientPlayback();
+    }
+
+    partial void OnSelectedAmbientSoundChanged(AlarmSound? value)
+    {
+        Persist(c => c.AmbientSoundPath = value?.Value);
+
+        // Picking a different sound while already playing should be heard right away, not
+        // on the next tick — selecting from the list or Browse are single discrete
+        // actions, not a continuous drag, so there's no thrashing risk in restarting
+        // immediately (contrast with volume below).
+        if (_ambientPlaying && !string.IsNullOrWhiteSpace(value?.Value))
+        {
+            _audioPlayer.PlayAmbient(value!.Value!, AmbientVolume);
+        }
+
+        UpdateAmbientPlayback();
+    }
+
+    /// <summary>Bumped on every ambient volume change; lets a delayed apply notice it was
+    /// superseded by a later one. See <see cref="ApplyAmbientVolumeAfterDelay"/>.</summary>
+    private int _ambientVolumeEpoch;
+
+    partial void OnAmbientVolumeChanged(int value)
+    {
+        Persist(c => c.AmbientVolume = value);
+
+        var path = SelectedAmbientSound?.Value;
+        if (!_ambientPlaying || string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+
+        // Debounced rather than restarted on every tick of the drag: macOS has no way to
+        // adjust afplay's volume on an already-running process (its -v flag is fixed at
+        // launch), so applying a new volume means killing and relaunching the loop — fine
+        // once the user has settled on a value, disruptive on every pixel of a drag.
+        var epoch = ++_ambientVolumeEpoch;
+        _ = ApplyAmbientVolumeAfterDelay(path, value, epoch);
+    }
+
+    private async Task ApplyAmbientVolumeAfterDelay(string path, int volume, int epoch)
+    {
+        await Task.Delay(TimeSpan.FromMilliseconds(300));
+
+        // Superseded by a later drag, or the loop was turned off/changed while waiting.
+        if (epoch != _ambientVolumeEpoch || !_ambientPlaying || SelectedAmbientSound?.Value != path)
+        {
+            return;
+        }
+
+        _audioPlayer.PlayAmbient(path, volume);
+    }
 
     partial void OnSelectedSoundChanged(AlarmSound? value) =>
         Persist(c => c.AlarmSoundPath = value?.Value);
@@ -460,7 +537,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         var path = await _filePicker.PickAudioFileAsync("Choose an alarm sound", _audioPlayer.SupportedExtensions);
         if (path is not null)
         {
-            SelectedSound = ResolveSound(path);
+            SelectedSound = ResolveSound(path, AvailableSounds, AvailableSounds.FirstOrDefault());
         }
     }
 
@@ -476,6 +553,30 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     [RelayCommand]
     private void StopAudio() => _audioPlayer.Stop();
+
+    /// <summary>
+    /// Previews the ambient track as a single one-shot play, on the same channel as
+    /// TestSound/StopAudio — not the looping channel a live session drives, so a preview
+    /// can't get stuck fighting the loop's own start/stop tracking.
+    /// </summary>
+    [RelayCommand]
+    private void TestAmbient()
+    {
+        if (!string.IsNullOrWhiteSpace(SelectedAmbientSound?.Value))
+        {
+            _audioPlayer.Play(SelectedAmbientSound.Value, AmbientVolume);
+        }
+    }
+
+    [RelayCommand]
+    private async Task BrowseAmbient()
+    {
+        var path = await _filePicker.PickAudioFileAsync("Choose an ambient sound", _audioPlayer.SupportedExtensions);
+        if (path is not null)
+        {
+            SelectedAmbientSound = ResolveSound(path, AvailableAmbientSounds, blankResult: null);
+        }
+    }
 
     [RelayCommand]
     private void ShowHistory() => ShowHistoryRequested?.Invoke(this, EventArgs.Empty);
@@ -817,6 +918,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private bool IsPaused { get; set; }
     private TimerMode Mode { get; set; } = TimerMode.Idle;
 
+    /// <summary>Tracks whether the ambient loop is the one currently running, so
+    /// <see cref="UpdateAmbientPlayback"/> only calls into <see cref="_audioPlayer"/> on an
+    /// actual state change rather than every tick.</summary>
+    private bool _ambientPlaying;
+
     /// <summary>Drives the popup's Pause button visibility.</summary>
     [ObservableProperty] private bool _canPauseNow;
 
@@ -830,6 +936,17 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     private void OnSessionEnded(object? sender, SessionEndedEventArgs e)
     {
+        // Every session end — completed, skipped, or stopped — silences the ambient loop
+        // immediately, rather than waiting for the next Apply() tick to notice Mode
+        // changed. UpdateAmbientPlayback() itself can't do this: it reads this ViewModel's
+        // own Mode/IsPaused fields, which still hold the *previous* state until the next
+        // TimerUpdated tick calls Apply() with the new one.
+        if (_ambientPlaying)
+        {
+            _ambientPlaying = false;
+            _audioPlayer.StopAmbient();
+        }
+
         // The history service is subscribed to the same event; refresh after it writes.
         RefreshTodaySummary();
 
@@ -908,6 +1025,42 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     /// own setter for the target side — using <c>_timerService.CurrentState</c> since those
     /// callers aren't already holding a state.
     /// </summary>
+    /// <summary>
+    /// Starts or stops the looping ambient track so it matches settings and the current
+    /// session state: on only during a running, unpaused Study session. Called from
+    /// <see cref="Apply"/> every tick and from <see cref="OnAmbientSoundEnabledChanged"/>,
+    /// so toggling the checkbox mid-session takes effect immediately rather than waiting
+    /// up to a second for the next tick. Comparing against <see cref="_ambientPlaying"/>
+    /// keeps this a no-op on every tick where the on/off decision didn't change, rather
+    /// than restarting the loop every 200ms. This only ever decides *whether* to play —
+    /// see <see cref="OnSelectedAmbientSoundChanged"/>/<see cref="OnAmbientVolumeChanged"/>
+    /// for keeping an already-playing loop in sync with *what* to play.
+    /// </summary>
+    private void UpdateAmbientPlayback()
+    {
+        var path = SelectedAmbientSound?.Value;
+        var shouldPlay = AmbientSoundEnabled
+            && !string.IsNullOrWhiteSpace(path)
+            && Mode == TimerMode.Study
+            && !IsPaused;
+
+        if (shouldPlay == _ambientPlaying)
+        {
+            return;
+        }
+
+        _ambientPlaying = shouldPlay;
+
+        if (shouldPlay)
+        {
+            _audioPlayer.PlayAmbient(path!, AmbientVolume);
+        }
+        else
+        {
+            _audioPlayer.StopAmbient();
+        }
+    }
+
     private void UpdateGoalRing(SessionState state)
     {
         var liveMinutes = LiveInProgressFocusMinutes(state);
@@ -1006,6 +1159,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         Mode = state.Mode;
         IsPausedNow = state.IsPaused;
         CanPauseNow = CanPause();
+        UpdateAmbientPlayback();
 
         var planned = state.Mode == TimerMode.Break
             ? _settings.Current.BreakDuration
@@ -1087,6 +1241,13 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _timerService.SystemResumed -= OnSystemResumed;
         _timerService.ReminderDue -= OnReminderDue;
         _settings.Changed -= OnSettingsChanged;
+
+        if (_ambientPlaying)
+        {
+            _ambientPlaying = false;
+            _audioPlayer.StopAmbient();
+        }
+
         GC.SuppressFinalize(this);
     }
 }

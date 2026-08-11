@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
@@ -35,6 +36,7 @@ public sealed class WindowsAudioPlayer : IAudioPlayer, IDisposable
 
     private const string DefaultAlias = "SystemAsterisk";
     private const string Alias = "focusflow_audio";
+    private const string AmbientAlias = "focusflow_ambient";
 
     private static readonly string[] Extensions = [".wav", ".mp3"];
 
@@ -51,10 +53,20 @@ public sealed class WindowsAudioPlayer : IAudioPlayer, IDisposable
         new("Notification", "Notification.Default")
     ];
 
+    /// <summary>Where FocusFlow.App.csproj copies Assets/Ambient/** at publish time — see
+    /// its comment for why these ship as loose files instead of AvaloniaResource.</summary>
+    private static readonly string AmbientSoundsDirectory =
+        Path.Combine(AppContext.BaseDirectory, "Assets", "Ambient");
+
     private readonly Lock _gate = new();
+    private readonly Lock _ambientGate = new();
+    private readonly Lazy<IReadOnlyList<AlarmSound>> _ambientSounds = new(DiscoverAmbientSounds);
     private bool _mciOpen;
+    private bool _ambientMciOpen;
 
     public IReadOnlyList<AlarmSound> AvailableSounds => Sounds;
+
+    public IReadOnlyList<AlarmSound> AvailableAmbientSounds => _ambientSounds.Value;
 
     public IReadOnlyList<string> SupportedExtensions => Extensions;
 
@@ -130,6 +142,62 @@ public sealed class WindowsAudioPlayer : IAudioPlayer, IDisposable
         _mciOpen = false;
     }
 
+    /// <summary>
+    /// Loops <paramref name="filePath"/> on its own MCI alias, independent of the
+    /// alarm/music channel above, so a reminder or end-of-session alarm can play over it
+    /// without cutting the loop. Unlike macOS's afplay, MCI's own "repeat" flag loops
+    /// natively — no relaunch, and so no seam to worry about.
+    /// </summary>
+    public void PlayAmbient(string filePath, int volume)
+    {
+        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+        {
+            return;
+        }
+
+        var level = Math.Clamp(volume, TimerConfig.MinVolume, TimerConfig.MaxVolume);
+
+        lock (_ambientGate)
+        {
+            CloseAmbientMci();
+
+            var deviceType = Path.GetExtension(filePath).Equals(".wav", StringComparison.OrdinalIgnoreCase)
+                ? "waveaudio"
+                : "mpegvideo";
+
+            if (Send($"open \"{filePath}\" type {deviceType} alias {AmbientAlias}") != 0)
+            {
+                return;
+            }
+
+            _ambientMciOpen = true;
+
+            Send(string.Format(CultureInfo.InvariantCulture, "setaudio {0} volume to {1}", AmbientAlias, level * 10));
+            Send($"play {AmbientAlias} repeat");
+        }
+    }
+
+    public void StopAmbient()
+    {
+        lock (_ambientGate)
+        {
+            CloseAmbientMci();
+        }
+    }
+
+    /// <summary>Must be called under <see cref="_ambientGate"/>.</summary>
+    private void CloseAmbientMci()
+    {
+        if (!_ambientMciOpen)
+        {
+            return;
+        }
+
+        Send($"stop {AmbientAlias}");
+        Send($"close {AmbientAlias}");
+        _ambientMciOpen = false;
+    }
+
     private static int Send(string command) =>
         mciSendString(command, null, 0, IntPtr.Zero);
 
@@ -144,5 +212,29 @@ public sealed class WindowsAudioPlayer : IAudioPlayer, IDisposable
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool PlaySound(string? pszSound, IntPtr hmod, uint fdwSound);
 
-    public void Dispose() => Stop();
+    private static List<AlarmSound> DiscoverAmbientSounds()
+    {
+        if (!Directory.Exists(AmbientSoundsDirectory))
+        {
+            return [];
+        }
+
+        return Directory.EnumerateFiles(AmbientSoundsDirectory, "*.wav")
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .Select(path => new AlarmSound(FormatAmbientLabel(path), path))
+            .ToList();
+    }
+
+    /// <summary>"white-noise.wav" -> "White Noise".</summary>
+    private static string FormatAmbientLabel(string path)
+    {
+        var words = Path.GetFileNameWithoutExtension(path).Split('-', StringSplitOptions.RemoveEmptyEntries);
+        return string.Join(' ', words.Select(w => char.ToUpperInvariant(w[0]) + w[1..]));
+    }
+
+    public void Dispose()
+    {
+        Stop();
+        StopAmbient();
+    }
 }
