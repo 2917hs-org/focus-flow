@@ -1,151 +1,51 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:viewModels="using:FocusFlow.App.ViewModels"
+        xmlns:views="using:FocusFlow.App.Views"
         x:Class="FocusFlow.App.Views.HistoryWindow"
         x:DataType="viewModels:HistoryViewModel"
         Title="FocusFlow — History"
         Icon="/Assets/app-icon.png"
-        Width="440"
-        Height="620"
-        MinWidth="360"
-        MinHeight="420"
+        Width="600"
+        Height="560"
+        CanResize="False"
         Background="{DynamicResource PaletteBackground}"
         Foreground="{DynamicResource PaletteText}">
 
+    <!-- A genuinely separate window from MainWindow — not embedded content — but same
+         dimensions as it, and with a Back button that hides this window and brings
+         MainWindow forward (see HistoryWindow.axaml.cs's BackRequested), so switching
+         between them reads as staying inside one app rather than juggling two windows of
+         different shapes. -->
     <Window.Styles>
-        <!-- HistoryWindow's own Border.card: MainWindow and BlockedAppsWindow each define
-             this locally rather than sharing it from App.axaml, so this follows the same
-             pattern rather than introducing a new shared style. -->
-        <Style Selector="Border.card">
+        <!-- Same secondary Button look MainWindow/BlockedAppsWindow use, since this window
+             doesn't share styles across window boundaries. -->
+        <Style Selector="Button.secondary">
             <Setter Property="Background" Value="{DynamicResource PaletteSurface}" />
+            <Setter Property="Foreground" Value="{DynamicResource PaletteText}" />
             <Setter Property="BorderBrush" Value="{DynamicResource PaletteBorder}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="10" />
-            <Setter Property="Padding" Value="16" />
+        </Style>
+        <Style Selector="Button.secondary:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource PaletteBackground}" />
+            <Setter Property="Foreground" Value="{DynamicResource PaletteText}" />
+        </Style>
+        <Style Selector="Button.secondary:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource PaletteBorder}" />
+            <Setter Property="Foreground" Value="{DynamicResource PaletteText}" />
         </Style>
     </Window.Styles>
 
-    <Grid Margin="24" RowDefinitions="Auto,Auto,Auto,Auto,*">
-
-        <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,12">
-            <TextBlock Grid.Column="0" Text="Session History"
-                       FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center" />
-            <ComboBox Grid.Column="1" Margin="0,0,8,0"
-                      ItemsSource="{Binding AvailableLabelFilters}"
-                      SelectedItem="{Binding SelectedLabelFilter, Mode=TwoWay}"
-                      ToolTip.Tip="Filter by label" />
-            <ComboBox Grid.Column="2"
-                      ItemsSource="{Binding AvailableRanges}"
-                      SelectedItem="{Binding SelectedRange, Mode=TwoWay}" />
-        </Grid>
-
-        <Border Grid.Row="1" Classes="card" Margin="0,0,0,12">
-            <StackPanel Spacing="6">
-                <TextBlock Text="{Binding SummaryText}"
-                           TextWrapping="Wrap" TextAlignment="Center"
-                           HorizontalAlignment="Center" />
-                <TextBlock Text="{Binding StreakText}"
-                           FontSize="12" FontWeight="SemiBold"
-                           Foreground="{DynamicResource PalettePrimary}"
-                           HorizontalAlignment="Center" />
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="24" Spacing="12">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Content="‹ Back" Classes="secondary" Click="OnBackClick" />
+                <TextBlock Text="Session History" FontSize="16" FontWeight="SemiBold"
+                           VerticalAlignment="Center" />
             </StackPanel>
-        </Border>
 
-        <!-- Only shown once there's at least one day of study time in range — an empty
-             chart (fresh install, or a range with nothing in it) would just be an empty
-             card taking up space above the "No sessions" message below. -->
-        <Border Grid.Row="2" Classes="card" Margin="0,0,0,12" IsVisible="{Binding HasChartData}">
-            <StackPanel>
-                <TextBlock Text="Daily focus minutes" FontSize="12" FontWeight="SemiBold"
-                           Foreground="{DynamicResource PaletteSecondary}" Margin="0,0,0,10" />
-                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-                    <ItemsControl ItemsSource="{Binding ChartBars}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <StackPanel Orientation="Horizontal" />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate DataType="viewModels:DailyChartBar">
-                                <StackPanel Width="26" Margin="2,0" ToolTip.Tip="{Binding DayLabel}">
-                                    <!-- Fixed-height track so every bar's baseline lines up
-                                         regardless of its own height. -->
-                                    <Border Height="72">
-                                        <Border Height="{Binding BarHeight}" Width="14"
-                                                VerticalAlignment="Bottom" HorizontalAlignment="Center"
-                                                Background="{DynamicResource PalettePrimary}"
-                                                CornerRadius="3" />
-                                    </Border>
-                                    <TextBlock Text="{Binding DayLabel}" FontSize="9"
-                                               Foreground="{DynamicResource PaletteSecondary}"
-                                               HorizontalAlignment="Center" Margin="0,4,0,0" />
-                                </StackPanel>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </ScrollViewer>
-            </StackPanel>
-        </Border>
-
-        <!-- Whole-range totals per label — independent of the ComboBox filter above, which
-             only narrows the list further down. Only shown once there's an actual label to
-             break out; see HistoryViewModel.HasLabelBreakdown. -->
-        <Border Grid.Row="3" Classes="card" Margin="0,0,0,12" IsVisible="{Binding HasLabelBreakdown}">
-            <StackPanel Spacing="6">
-                <TextBlock Text="By label" FontSize="12" FontWeight="SemiBold"
-                           Foreground="{DynamicResource PaletteSecondary}" />
-                <ItemsControl ItemsSource="{Binding LabelBreakdown}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate DataType="viewModels:LabelBreakdownEntry">
-                            <Grid ColumnDefinitions="*,Auto" Margin="0,2">
-                                <TextBlock Grid.Column="0" Text="{Binding Label}"
-                                           TextTrimming="CharacterEllipsis" />
-                                <TextBlock Grid.Column="1" Text="{Binding Summary}"
-                                           FontSize="11" Foreground="{DynamicResource PaletteSecondary}"
-                                           Margin="8,0,0,0" />
-                            </Grid>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </StackPanel>
-        </Border>
-
-        <Grid Grid.Row="4">
-            <TextBlock Text="{Binding EmptyStateText}"
-                       Foreground="{DynamicResource PaletteSecondary}"
-                       HorizontalAlignment="Center" VerticalAlignment="Center"
-                       IsVisible="{Binding NoEntries}" />
-
-            <!-- ListBox rather than a raw ItemsControl: this is the one place in the app
-                 the list could genuinely grow large (history.jsonl has no cap — see the
-                 README's own caveat about that), and ListBox virtualizes by default where
-                 a plain ItemsControl inside a ScrollViewer would not. -->
-            <ListBox ItemsSource="{Binding Entries}"
-                     IsVisible="{Binding HasEntries}"
-                     Background="Transparent"
-                     BorderThickness="0">
-                <ListBox.ItemTemplate>
-                    <DataTemplate DataType="viewModels:HistoryEntry">
-                        <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto"
-                              Margin="0,4">
-                            <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding Mode}"
-                                       FontWeight="SemiBold" />
-                            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Duration}"
-                                       FontWeight="SemiBold" />
-                            <TextBlock Grid.Row="1" Grid.Column="0" Text="{Binding When}"
-                                       FontSize="11" Foreground="{DynamicResource PaletteSecondary}" />
-                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Outcome}"
-                                       FontSize="11" Foreground="{DynamicResource PaletteSecondary}"
-                                       HorizontalAlignment="Right" />
-                            <TextBlock Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
-                                       Text="{Binding Label}" IsVisible="{Binding HasLabel}"
-                                       FontSize="11" FontStyle="Italic"
-                                       Foreground="{DynamicResource PaletteSecondary}"
-                                       TextWrapping="Wrap" Margin="0,2,0,0" />
-                        </Grid>
-                    </DataTemplate>
-                </ListBox.ItemTemplate>
-            </ListBox>
-        </Grid>
-    </Grid>
+            <!-- DataContext flows down from this Window's own — set by App.axaml.cs to the
+                 shared HistoryViewModel singleton. -->
+            <views:HistoryView />
+        </StackPanel>
+    </ScrollViewer>
 </Window>

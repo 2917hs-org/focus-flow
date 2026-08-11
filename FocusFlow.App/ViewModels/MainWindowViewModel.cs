@@ -161,8 +161,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _timerService.SystemResumed += OnSystemResumed;
         _timerService.ReminderDue += OnReminderDue;
 
-        // BlockedAppsWindow (and the tray's quick-add) can change the list independently of
-        // this ViewModel, so the count is read fresh from settings rather than owned here.
+        // BlockedAppsViewModel (and the tray's quick-add) can change the list independently
+        // of this ViewModel, so the count is read fresh from settings rather than owned here.
         _settings.Changed += OnSettingsChanged;
 
         Apply(_timerService.CurrentState);
@@ -187,6 +187,15 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     /// <summary>Quick-pick options in the idle-threshold dropdown; any value up to 30 can still be typed.</summary>
     public IReadOnlyList<int> IdleAutoPauseMinutePresets { get; } = [1, 2, 3, 5, 10, 15, 30];
 
+    /// <summary>The whole 1-10 range for the sessions-per-run dropdown — small enough to list in full.</summary>
+    public IReadOnlyList<int> SessionCountPresets { get; } = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+    /// <summary>The whole 1-10 range for the reminder-lead-time dropdown — small enough to list in full.</summary>
+    public IReadOnlyList<int> ReminderLeadMinutePresets { get; } = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+    /// <summary>Quick-pick options in the daily-goal dropdown; any value up to 720 can still be typed.</summary>
+    public IReadOnlyList<int> DailyGoalPresets { get; } = [30, 60, 90, 120, 180, 240, 360, 480, 720];
+
     public bool IsStartupSupported => _startupService.IsSupported;
 
     /// <summary>
@@ -208,9 +217,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     private void OnSettingsChanged(object? sender, SettingsChangedEventArgs e) =>
         OnUiThread(() => BlockedAppCount = e.Config.BlockedAppIds.Count);
-
-    /// <summary>Session count only applies when the run is finite (FR-006 vs FR-007).</summary>
-    public bool IsSessionCountEnabled => !InfiniteMode;
 
     private void LoadFromSettings()
     {
@@ -311,14 +317,40 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     partial void OnAutoStartStudyChanged(bool value) => Persist(c => c.AutoStartStudy = value);
 
-    partial void OnSessionCountChanged(int value) => Persist(c => c.SessionCount = value);
+    // Now an editable dropdown rather than a NumericUpDown, so — same reasoning as
+    // OnStudyDurationChanged/OnBreakDurationChanged — nothing upstream clamps a typed
+    // value; enforce TimerConfig's 1-10 session range here instead.
+    partial void OnSessionCountChanged(int value)
+    {
+        var clamped = Math.Clamp(value, TimerConfig.MinSessionCount, TimerConfig.MaxSessionCount);
+        if (clamped != value)
+        {
+            SessionCount = clamped;
+            return;
+        }
+
+        Persist(c => c.SessionCount = value);
+    }
 
     partial void OnAlarmVolumeChanged(int value) => Persist(c => c.AlarmVolume = value);
 
     partial void OnReminderEnabledChanged(bool value) => Persist(c => c.ReminderEnabled = value);
 
-    partial void OnReminderLeadMinutesChanged(int value) =>
+    // Same reasoning as OnSessionCountChanged: an editable dropdown rather than a
+    // NumericUpDown, so the 1-10 minute range shown in the UI is enforced here. Not
+    // TimerConfig.MinReminderLead/MaxReminderLead directly — those are a 30 second floor and
+    // a 10 minute ceiling, and the UI has only ever offered whole minutes starting at 1.
+    partial void OnReminderLeadMinutesChanged(int value)
+    {
+        var clamped = Math.Clamp(value, 1, (int)TimerConfig.MaxReminderLead.TotalMinutes);
+        if (clamped != value)
+        {
+            ReminderLeadMinutes = clamped;
+            return;
+        }
+
         Persist(c => c.ReminderLeadTime = TimeSpan.FromMinutes(value));
+    }
 
     partial void OnIdleAutoPauseEnabledChanged(bool value) => Persist(c => c.IdleAutoPauseEnabled = value);
 
@@ -430,11 +462,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     partial void OnSelectedSoundChanged(AlarmSound? value) =>
         Persist(c => c.AlarmSoundPath = value?.Value);
 
-    partial void OnInfiniteModeChanged(bool value)
-    {
-        Persist(c => c.InfiniteMode = value);
-        OnPropertyChanged(nameof(IsSessionCountEnabled));
-    }
+    partial void OnInfiniteModeChanged(bool value) => Persist(c => c.InfiniteMode = value);
 
     partial void OnThemeChanged(AppTheme value)
     {

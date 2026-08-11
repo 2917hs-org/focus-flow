@@ -62,9 +62,11 @@ public class TimerConfig
 
     /// <summary>
     /// FR-006. When true the study/break cycle repeats forever and
-    /// <see cref="SessionCount"/> is ignored.
+    /// <see cref="SessionCount"/> is ignored. Defaults off so a fresh install starts with
+    /// <see cref="SessionCount"/> (4) usable right away, rather than greyed out behind a
+    /// mode most people will not have a reason to flip on.
     /// </summary>
-    public bool InfiniteMode { get; set; } = true;
+    public bool InfiniteMode { get; set; } = false;
 
     /// <summary>FR-007. Study sessions to run before the timer stops, when not infinite.</summary>
     public int SessionCount { get; set; } = 4;

@@ -8,28 +8,29 @@ namespace FocusFlow.App.ViewModels;
 /// (Themes/MacOSPalette.axaml or Themes/WindowsPalette.axaml) rather than fixed hex values.
 /// </summary>
 /// <remarks>
-/// Resolved once, on first access, via <c>Avalonia.Application.Current.TryFindResource</c> rather
-/// than bound as a live DynamicResource in XAML: <see cref="MainWindowViewModel"/> assigns
-/// this as a plain C# <see cref="IBrush"/> property once a second from code, not from a
-/// XAML binding path a DynamicResource could hook into. That first access happens after
-/// <c>App.Initialize()</c> has already merged the palette into <c>Application.Resources</c>
-/// — MainWindowViewModel is constructed from the DI container in
-/// <c>OnFrameworkInitializationCompleted</c>, which always runs after <c>Initialize()</c> —
-/// so the resource is there by the time anything asks for it. The one real limitation this
-/// carries: a live OS theme switch while "System" is selected and the app is already
-/// running won't re-resolve these particular colours until restart, unlike everything
-/// still wired through DynamicResource in XAML.
+/// Resolved on every access via <c>Avalonia.Application.Current.TryFindResource</c> rather
+/// than cached, and not bound as a live DynamicResource in XAML either: <see
+/// cref="MainWindowViewModel"/> assigns this as a plain C# <see cref="IBrush"/> property from
+/// code (on every tick, plus once at startup) rather than from a XAML binding path a
+/// DynamicResource could hook into. Resolving fresh each time — instead of caching in a
+/// <c>static readonly</c> field, as this used to — matters for two reasons: a <c>static
+/// readonly</c> field is initialised at first touch, which for this type happened to be
+/// <em>before</em> <c>MainWindowViewModel</c>'s constructor got to apply the user's saved
+/// Theme setting, so it would permanently cache whichever colour the OS's ambient
+/// appearance resolved to rather than the user's actual choice; and it also means a live OS
+/// theme switch while "System" is selected now picks up the new colours on the very next
+/// tick, rather than needing a restart.
 /// </remarks>
 internal static class ModeBrushes
 {
-    public static readonly IBrush Study = Resolve("PalettePrimary");
+    public static IBrush Study => Resolve("PalettePrimary");
 
-    public static readonly IBrush Break = Resolve("PaletteSuccess");
+    public static IBrush Break => Resolve("PaletteSuccess");
 
-    public static readonly IBrush Paused = Resolve("PaletteWarning");
+    public static IBrush Paused => Resolve("PaletteWarning");
 
     /// <summary>Deliberately muted — nothing is running, so nothing should draw the eye.</summary>
-    public static readonly IBrush Idle = Resolve("PaletteSecondary");
+    public static IBrush Idle => Resolve("PaletteSecondary");
 
     private static IBrush Resolve(string key)
     {
